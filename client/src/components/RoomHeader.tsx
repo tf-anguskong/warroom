@@ -8,12 +8,14 @@ import { Icons, SeverityBadge } from './ui';
 import { ExportRoomDialog } from './Archive';
 import { AwayButton } from './Away';
 import { SoundToggle } from './SoundToggle';
+import { InviteDialog } from './Guests';
 
 export function RoomHeader({ state }: { state: IncidentState }) {
   const { meta, toast, userById, me } = useApp();
   const inc = state.incident;
   const [now, setNow] = useState(Date.now());
   const [exporting, setExporting] = useState(false);
+  const [inviting, setInviting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(inc.title);
 
@@ -124,6 +126,12 @@ export function RoomHeader({ state }: { state: IncidentState }) {
       <button className="icon-btn" onClick={copyLink} title="Copy war room link" aria-label="Copy war room link">
         {Icons.link}
       </button>
+      {!me.isGuest && state.canControl && inc.status !== 'resolved' && (
+        <button className="btn primary sm" onClick={() => setInviting(true)} title="Invite a responder or a guest with a single-use link">
+          {Icons.plus} Invite
+        </button>
+      )}
+      {inviting && <InviteDialog state={state} onClose={() => setInviting(false)} />}
       {!me.isGuest && (state.canControl || me.isAdmin) && (
         <button className="btn ghost sm" onClick={() => setExporting(true)} title="Export the whole room to an archive you can restore on any War Room">
           {Icons.download} Export room

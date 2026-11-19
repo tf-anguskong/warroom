@@ -666,7 +666,10 @@ async function acceptMember(req: Request, res: Response, inv: InviteRow, display
       problem = 'Your account is deactivated. Ask an admin to reactivate it.';
       return;
     }
-    user = existing ?? createUser({ userName: email, email, displayName });
+    // Team / title from the invite: set on new accounts, and on existing ones that don't have one.
+    const title = inv.org?.trim() || null;
+    user = existing ?? createUser({ userName: email, email, displayName, title });
+    if (existing && title && !existing.title) user = updateUser(existing.id, { title }) ?? existing;
     created = !existing;
     q.run('UPDATE invites SET used_by = ? WHERE id = ?', user.id, inv.id);
     q.run('INSERT OR IGNORE INTO incident_members (incident_id, user_id, joined_at) VALUES (?, ?, ?)', inv.incident_id, user.id, ts);

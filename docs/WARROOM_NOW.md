@@ -124,7 +124,7 @@ If you skipped email, a notice reminds you that codes will be shown to you inste
 
 ## 3. Inviting people
 
-In the room's right-hand panel, **Invite** creates a single-use link. Choose:
+In the room's top bar, **Invite** creates a single-use link. For a responder you can add their team or title (for example "Network team · Firewall engineer"); it shows under their name in the room's People list. Choose:
 
 | | **Responder** | **Guest** |
 |---|---|---|

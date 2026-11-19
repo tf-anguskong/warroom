@@ -36,6 +36,34 @@ export function DetailsPanel({ state, presence }: { state: IncidentState; presen
     groups.set(k, [...(groups.get(k) ?? []), p]);
   }
 
+  // Everyone who belongs to this room: members, plus guests whose access hasn't ended.
+  const online = new Set(presence.map((p) => p.userId));
+  const everyone = [...new Set([...state.members.map((m) => m.userId), ...presence.map((p) => p.userId)])].filter((id) => {
+    const u = userById(id);
+    return online.has(id) || (u ? u.active : true);
+  });
+  const offline = everyone
+    .filter((id) => !online.has(id))
+    .sort((a, b) => (userById(a)?.displayName ?? '').localeCompare(userById(b)?.displayName ?? ''));
+
+  /** Name, title or team, roles, guest tag, task, away. Same for online and offline people. */
+  const personInfo = (id: string, name: string, away: Presence['away']) => {
+    const roles = state.roles.filter((r) => r.userId === id).map((r) => meta.roles.find((m) => m.key === r.role)?.label);
+    const u = userById(id);
+    const task = state.members.find((m) => m.userId === id)?.task;
+    return (
+      <span>
+        {name}
+        {roles.length > 0 && <small className="muted"> · {roles.join(', ')}</small>}
+        <GuestTag user={u} />
+        {state.roomAdmins.includes(id) && <small className="muted"> · room admin</small>}
+        {u?.title && !u.isGuest && <div className="person-title">{u.title}</div>}
+        {away && <div className="away-line">{awayText(away)}</div>}
+        {task && <div className="person-task">{task}</div>}
+      </span>
+    );
+  };
+
   return (
     <div className="details">
       <section>
@@ -180,7 +208,7 @@ export function DetailsPanel({ state, presence }: { state: IncidentState; presen
 
       <section>
         <h3>
-          In the room <span className="count">{presence.length}</span>
+          People <span className="count" title={`${presence.length} in the room now`}>{presence.length}/{everyone.length}</span>
         </h3>
         {[...groups.entries()]
           .sort(([a], [b]) => (a === '' ? 1 : b === '' ? -1 : 0))
@@ -192,37 +220,42 @@ export function DetailsPanel({ state, presence }: { state: IncidentState; presen
                     {Icons.volume} {roomName(roomId) ?? 'Voice'}
                   </>
                 ) : (
-                  'Not in voice'
+                  'In the room, not in voice'
                 )}
               </div>
               <ul className="people">
-                {people.map((p) => {
-                  const roles = state.roles.filter((r) => r.userId === p.userId).map((r) => meta.roles.find((m) => m.key === r.role)?.label);
-                  return (
-                    <li
-                      key={p.userId}
-                      className={state.canControl && p.userId !== me.id ? 'movable' : ''}
-                      draggable={state.canControl && p.userId !== me.id}
-                      onDragStart={(e: DragEvent) => e.dataTransfer.setData(PERSON_DRAG, p.userId)}
-                    >
-                      <Avatar id={p.userId} name={p.displayName} size={24} speaking={speaking.has(p.userId)} muted={!!p.voiceRoomId && p.muted} away={Boolean(p.away)} />
-                      <span>
-                        {p.displayName}
-                        {p.away && <div className="away-line">{awayText(p.away)}</div>}
-                        {roles.length > 0 && <small className="muted"> · {roles.join(', ')}</small>}
-                        <GuestTag user={userById(p.userId)} />
-                        {state.roomAdmins.includes(p.userId) && <small className="muted"> · room admin</small>}
-                        {state.members.find((m) => m.userId === p.userId)?.task && (
-                          <div className="person-task">{state.members.find((m) => m.userId === p.userId)!.task}</div>
-                        )}
-                      </span>
-                      {p.userId !== me.id && <PersonActions state={state} person={p} />}
-                    </li>
-                  );
-                })}
+                {people.map((p) => (
+                  <li
+                    key={p.userId}
+                    className={state.canControl && p.userId !== me.id ? 'movable' : ''}
+                    draggable={state.canControl && p.userId !== me.id}
+                    onDragStart={(e: DragEvent) => e.dataTransfer.setData(PERSON_DRAG, p.userId)}
+                  >
+                    <Avatar id={p.userId} name={p.displayName} size={24} speaking={speaking.has(p.userId)} muted={!!p.voiceRoomId && p.muted} away={Boolean(p.away)} />
+                    {personInfo(p.userId, p.displayName, p.away ?? null)}
+                    {p.userId !== me.id && <PersonActions state={state} person={p} />}
+                  </li>
+                ))}
               </ul>
             </div>
           ))}
+        {offline.length > 0 && (
+          <div className="people-group">
+            <div className="people-group-head">Not in the room</div>
+            <ul className="people offline">
+              {offline.map((id) => {
+                const u = userById(id);
+                const away = state.members.find((m) => m.userId === id)?.away ?? null;
+                return (
+                  <li key={id} title={`${u?.displayName ?? 'Someone'} isn’t connected right now`}>
+                    <Avatar id={id} name={u?.displayName ?? '?'} size={24} away={Boolean(away)} />
+                    {personInfo(id, u?.displayName ?? 'Someone', away)}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
       </section>
       {handoff && <CommandDialog state={state} presence={presence} current={ic} onClose={() => setHandoff(false)} />}
     </div>

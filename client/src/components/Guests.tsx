@@ -62,7 +62,7 @@ function ScopePicker({ state, scope, onChange }: { state: IncidentState; scope: 
   );
 }
 
-function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () => void }) {
+export function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () => void }) {
   const { toast, meta, me } = useApp();
   // Full responders (accounts) can be invited by admins, and in a quick War Room by whoever runs the room.
   const canInviteMembers = me.isAdmin || (meta.mode === 'now' && state.canControl);
@@ -184,8 +184,13 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
             <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Dana Kim" maxLength={80} />
           </label>
           <label>
-            Organization
-            <input value={org} onChange={(e) => setOrg(e.target.value)} placeholder="Outside IR firm" maxLength={80} />
+            {member ? 'Team / title' : 'Organization'}
+            <input
+              value={org}
+              onChange={(e) => setOrg(e.target.value)}
+              placeholder={member ? 'Network team · Firewall engineer' : 'Outside IR firm'}
+              maxLength={80}
+            />
           </label>
         </div>
         {member && !meta.guestEmail.enabled ? (
@@ -354,13 +359,9 @@ export function GuestsSection({ state }: { state: IncidentState }) {
         <h3>
           Guests <span className="count">{active.length}</span>
         </h3>
-        {manage && state.incident.status !== 'resolved' && (
-          <button className="btn ghost sm" onClick={() => setDialog('invite')}>
-            {Icons.link} {canInviteMembers ? 'Invite' : 'Invite guest'}
-          </button>
-        )}
+
       </div>
-      {active.length === 0 && <p className="muted small">No guests. Invite people outside the organization with a single-use link.</p>}
+      {active.length === 0 && <p className="muted small">No guests. Use Invite at the top of the room to add someone outside your team.</p>}
       <ul className="guest-list">
         {active.map((g) => (
           <li key={g.id}>
