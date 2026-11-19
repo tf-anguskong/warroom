@@ -28,6 +28,20 @@ function describeFailure(e: unknown) {
   return "Can't reach the War Room server. Check that it's running, then try again.";
 }
 
+/**
+ * Where to go after signing in: a path on this site, or '/'. Resolved the way the browser will
+ * resolve it, so `//host`, `/\host` and `/<tab>/host` (browsers drop tabs and newlines) can't leave.
+ */
+function safeReturnTo(raw: string | null): string {
+  if (!raw || !raw.startsWith('/')) return '/';
+  try {
+    const u = new URL(raw, location.origin);
+    return u.origin === location.origin ? `${u.pathname}${u.search}${u.hash}` : '/';
+  } catch {
+    return '/';
+  }
+}
+
 export function Login() {
   const [params] = useSearchParams();
   const [cfg, setCfg] = useState<AuthConfig | null>(null);
@@ -36,7 +50,7 @@ export function Login() {
   const [email, setEmail] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const error = params.get('error');
-  const returnTo = params.get('returnTo') ?? '/';
+  const returnTo = safeReturnTo(params.get('returnTo'));
   const idp = IDP_NAME[params.get('provider') ?? ''] ?? 'your identity provider';
 
   useEffect(() => {
@@ -51,7 +65,7 @@ export function Login() {
     setErr(null);
     try {
       await api.post('/auth/dev-login', { name, email });
-      location.href = returnTo.startsWith('/') ? returnTo : '/';
+      location.href = returnTo;
     } catch (e) {
       setErr(describeFailure(e));
     }
@@ -150,7 +164,7 @@ function EmailLogin({ returnTo, first, canSend }: { returnTo: string; first: boo
     setBusy(true);
     try {
       await api.post('/auth/email/verify', { email: email.trim(), code });
-      location.href = returnTo.startsWith('/') ? returnTo : '/';
+      location.href = returnTo;
     } catch (x) {
       setErr(describeFailure(x));
       setBusy(false);
