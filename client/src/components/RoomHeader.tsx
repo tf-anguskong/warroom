@@ -123,7 +123,7 @@ export function RoomHeader({ state }: { state: IncidentState }) {
       <div className="ic-chip" title="Incident Commander">
         <span className="label">IC</span> {ic ? ic.displayName : <em className="warn-text">unassigned</em>}
       </div>
-      <button className="icon-btn" onClick={copyLink} title="Copy war room link" aria-label="Copy war room link">
+      <button className="icon-btn" onClick={copyLink} title="Copy war room link: people with an account join directly; anyone else can ask to join" aria-label="Copy war room link">
         {Icons.link}
       </button>
       {!me.isGuest && state.canControl && inc.status !== 'resolved' && (

@@ -133,7 +133,18 @@ In the room's top bar, **Invite** creates a single-use link. For a responder you
 | Account | a War Room account (their email) that can sign in again later | temporary; access ends after 2–72 hours, or when the room is resolved, or when you end it |
 | Can | take roles and tasks, run the room if made IC or room admin | chat, talk and edit what they were given |
 
-In a War Room NOW, the Incident Commander and room admins can invite responders as well as the admin.
+The Incident Commander and room admins can invite responders as well as the admin. Every invite is its own single-use link, so make one per person.
+
+### The room link: asking to join
+
+The room's own link (*Copy war room link* in the top bar) can go anywhere: a chat channel, a bridge invite, an email to a group. On its own it only lets someone **ask**:
+
+1. People with an account sign in and go straight into the room.
+2. Anyone else chooses **Ask to join** and gives their name, email, team and why. Their page waits.
+3. You see the request at the top of the right pane, with a sound. Choose **Let in as responder**, **As guest…** (tick what they can see and for how long), or **Turn down**.
+4. Their page moves on by itself to their own single-use invite. With email set up they confirm their address with a code; without email they go straight in.
+
+The page shows only the incident key, not the title. Requests expire after 30 minutes. Who you let in or turned down is on the timeline. If you can't tell who's asking, check with them another way before letting them in.
 
 ### How people prove it's them
 

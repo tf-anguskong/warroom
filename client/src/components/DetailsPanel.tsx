@@ -8,6 +8,7 @@ import type { IncidentState, Presence } from '../types';
 import { Avatar, Icons, Modal } from './ui';
 import { GuestsSection, GuestTag } from './Guests';
 import { awayText } from './Away';
+import { JoinRequests } from './JoinRequests';
 
 export function DetailsPanel({ state, presence }: { state: IncidentState; presence: Presence[] }) {
   const { meta, users, me, toast, userById } = useApp();
@@ -66,6 +67,7 @@ export function DetailsPanel({ state, presence }: { state: IncidentState; presen
 
   return (
     <div className="details">
+      <JoinRequests state={state} />
       <section>
         <div className="section-head">
           <h3>Summary</h3>

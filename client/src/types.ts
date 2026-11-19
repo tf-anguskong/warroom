@@ -121,6 +121,8 @@ export interface IncidentState {
   shifts: Shift[];
   /** People asking the Incident Commander for command. */
   commandRequests?: { userId: string; note: string; requestedAt: string }[];
+  /** People asking to join from the room link (only for whoever runs the room). */
+  joinRequests?: { id: string; name: string; email: string; org: string; note: string; createdAt: string }[];
 }
 
 /** A scheduled shift in a war room (times are ISO, UTC). */

@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AppProvider } from './lib/app';
 import { Login } from './pages/Login';
 import { Join } from './pages/Join';
+import { Ask } from './pages/Ask';
 import { Setup } from './pages/Setup';
 import { Dashboard } from './pages/Dashboard';
 import { IncidentRoom } from './pages/IncidentRoom';
@@ -17,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/join/:token" element={<Join />} />
+        <Route path="/ask/:id" element={<Ask />} />
         <Route path="/setup/:token" element={<Setup />} />
         <Route
           path="/*"

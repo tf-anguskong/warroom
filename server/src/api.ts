@@ -21,6 +21,7 @@ import { adminGroupIds, adminSources, bus, getUser, isAdmin, logAdminAction, oth
 import { mailStatus } from './mail.js';
 import { mentionedUserIds, mentionsToText, resolveMentions } from './mentions.js';
 import { canSee, guestsOf, signInCodeBlock } from './guests.js';
+import { pendingJoinRequests } from './join-requests.js';
 import { notesFor, notesForExport } from './notes.js';
 import { attachmentsOf, attachToMessage, filesForExport, pendingUploads } from './files.js';
 import { shiftsForExport, shiftsOf } from './shifts.js';
@@ -595,6 +596,8 @@ api.get(
             : {}),
         })),
       guests: guestsOf(inc.id, viewer, manageGuests),
+      // People asking to join from the room link: only for whoever can let them in.
+      ...(manageGuests && inc.status !== 'resolved' ? { joinRequests: pendingJoinRequests(inc.id) } : {}),
       // Pending asks for command: everyone in the room can see who asked (it's on the timeline anyway).
       commandRequests: viewer.is_guest
         ? []

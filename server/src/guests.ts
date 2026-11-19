@@ -40,7 +40,7 @@ export function parseScope(raw: string | null | undefined): GuestScope {
 }
 
 /** Keep only things that really belong to (or are shared into) this incident. */
-function cleanScope(incidentId: string, raw: unknown): GuestScope {
+export function cleanScope(incidentId: string, raw: unknown): GuestScope {
   const s = parseScope(JSON.stringify(raw ?? {}));
   const channels = new Set(visibleChannelIds(incidentId));
   const ids = (sql: string) => new Set(q.all<{ id: string }>(sql, incidentId).map((r) => r.id));
@@ -133,7 +133,7 @@ export function guestAllowed(req: Request, user: UserRow) {
 
 const hashToken = (t: string) => createHash('sha256').update(t).digest('hex');
 const LINK_HOURS = [1, 4, 8, 24, 72];
-const ACCESS_HOURS = [2, 4, 8, 12, 24, 72];
+export const ACCESS_HOURS = [2, 4, 8, 12, 24, 72];
 
 interface InviteRow {
   id: string;
@@ -158,7 +158,7 @@ interface InviteRow {
   code_attempts: number;
   code_sends: string;
   kind: 'guest' | 'member';
-  code_mode: 'email' | 'manual';
+  code_mode: 'email' | 'manual' | 'link';
 }
 
 function inviteStatus(inv: InviteRow) {
@@ -247,14 +247,55 @@ async function requireControl(req: Request, incidentId: string) {
   return inc;
 }
 
+/**
+ * Store a single-use invite and return its link token (only its hash is kept) and, in 'manual' mode,
+ * the join code the inviter passes on. 'link' mode (someone let in from a join request, no email):
+ * no code, since the person already proved they're the one who asked.
+ */
+export function insertInvite(o: {
+  incidentId: string;
+  kind: 'guest' | 'member';
+  label: string;
+  org: string;
+  note: string;
+  scope: GuestScope;
+  accessHours: number;
+  linkHours: number;
+  email: string | null;
+  createdBy: string;
+  codeMode: 'email' | 'manual' | 'link';
+}) {
+  const token = randomBytes(32).toString('base64url');
+  const id = newId();
+  const code = o.codeMode === 'manual' ? newCode() : null;
+  const expires = new Date(Date.now() + o.linkHours * 3600_000).toISOString();
+  q.run(
+    `INSERT INTO invites (id, incident_id, token_hash, label, org, note, scope, access_hours, created_by, created_at, expires_at, email, kind, code_mode, code_hash, code_expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    id, o.incidentId, hashToken(token), o.label, o.org, o.note, JSON.stringify(o.scope), o.accessHours, o.createdBy, now(), expires,
+    o.email, o.kind, o.codeMode, code ? hashCode(id, code) : null, code ? expires : null,
+  );
+  return { id, token, code, expiresAt: expires };
+}
+
 export const guestsRouter = Router();
 
-/** Can this person invite full responders (accounts, not guests)? Admins always; in quick mode, whoever runs the room. */
+/** Can this person invite full responders (accounts, not guests)? Admins, and whoever runs the room. */
 export async function canInviteMembers(user: UserRow, incidentId: string) {
   if (user.is_guest) return false;
   if (isAdmin(user)) return true;
   const { canControl } = await import('./api.js');
-  return config.mode === 'now' && canControl(user, incidentId);
+  return canControl(user, incidentId);
+}
+
+/**
+ * Without email, nobody proves they own the address on a new responder account: whoever invites or
+ * lets them in chooses it. A new account under someone else's address could later be linked to their
+ * Okta sign-in, so only admins (and whoever runs a quick War Room) may do that. Null = allowed.
+ */
+export function unverifiedMemberBlock(user: UserRow): string | null {
+  if (smtpEnabled() || mailStatus().devOutbox || isAdmin(user) || config.mode === 'now') return null;
+  return 'This War Room can’t send email, so a responder’s address can’t be checked: only an admin can add responders. Let them in as a guest, or ask an admin.';
 }
 
 /** Email codes can actually be delivered (SMTP, or the dev outbox while developing). */
@@ -274,7 +315,9 @@ guestsRouter.post(
     const label = str(req.body?.label, 80);
     if (!label) throw new HttpError(400, kind === 'member' ? "Enter the person's name" : "Enter the guest's name");
     if (kind === 'member') {
-      if (!(await canInviteMembers(req.user!, inc.id))) throw new HttpError(403, 'Only an admin can invite full responders here; invite them as a guest instead');
+      if (!(await canInviteMembers(req.user!, inc.id))) throw new HttpError(403, 'Only the Incident Commander, a room admin or an admin can invite responders');
+      const blocked = unverifiedMemberBlock(req.user!);
+      if (blocked) throw new HttpError(403, blocked);
     }
     const linkHours = LINK_HOURS.includes(Number(req.body?.linkHours)) ? Number(req.body.linkHours) : 24;
     const accessHours = ACCESS_HOURS.includes(Number(req.body?.accessHours)) ? Number(req.body.accessHours) : 12;
@@ -291,30 +334,19 @@ guestsRouter.post(
     if (!email && smtpEnabled() && config.guestRequireEmail) {
       throw new HttpError(400, "Enter the guest's email: they'll need a code sent there to join");
     }
-    const token = randomBytes(32).toString('base64url');
-    const id = newId();
-    const ts = now();
-    const code = manual ? newCode() : null;
-    q.run(
-      `INSERT INTO invites (id, incident_id, token_hash, label, org, note, scope, access_hours, created_by, created_at, expires_at, email, kind, code_mode, code_hash, code_expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id,
-      inc.id,
-      hashToken(token),
-      label,
-      str(req.body?.org, 80),
-      str(req.body?.note, 300),
-      JSON.stringify(scope),
-      accessHours,
-      req.user!.id,
-      ts,
-      new Date(Date.now() + linkHours * 3600_000).toISOString(),
-      email || null,
+    const { id, token, code } = insertInvite({
+      incidentId: inc.id,
       kind,
-      manual ? 'manual' : 'email',
-      code ? hashCode(id, code) : null,
-      code ? new Date(Date.now() + linkHours * 3600_000).toISOString() : null,
-    );
+      label,
+      org: str(req.body?.org, 80),
+      note: str(req.body?.note, 300),
+      scope,
+      accessHours,
+      linkHours,
+      email: email || null,
+      createdBy: req.user!.id,
+      codeMode: manual ? 'manual' : 'email',
+    });
     const { addTimeline } = await import('./api.js');
     const org = str(req.body?.org, 80);
     addTimeline(
@@ -444,7 +476,7 @@ guestsRouter.post(
       const code = newCode();
       q.run(
         // A guest who joined without a code needs one from now on, so the new link alone isn't enough.
-        `UPDATE invites SET token_hash = ?, code_mode = CASE WHEN email IS NULL OR email = '' THEN 'manual' ELSE code_mode END,
+        `UPDATE invites SET token_hash = ?, code_mode = CASE WHEN email IS NULL OR email = '' OR code_mode = 'link' THEN 'manual' ELSE code_mode END,
            code_hash = ?, code_expires_at = ?, code_attempts = 0 WHERE id = ?`,
         hashToken(token),
         hashCode(inv.id, code),
@@ -546,7 +578,7 @@ export function maskEmail(e: string) {
 }
 
 /** Does joining (or signing back in) with this invite need a code? */
-const needsCode = (inv: InviteRow) => inv.code_mode === 'manual' || Boolean(inv.email);
+const needsCode = (inv: InviteRow) => inv.code_mode === 'manual' || (inv.code_mode !== 'link' && Boolean(inv.email));
 const newCode = () => String(randomInt(0, 1_000_000)).padStart(6, '0');
 
 const codeKey = createHash('sha256').update(`guest-code:${config.sessionSecret}`).digest();
@@ -715,9 +747,9 @@ inviteAuthRouter.post('/auth/invite/:token/accept', async (req, res) => {
     inv.incident_id,
     g.id,
     'guest',
-    `${who} joined as a guest using an invite from ${inviter}${inv.email ? `, email verified (${maskEmail(inv.email)})` : ''}; access until ${expiresAt.slice(11, 16)} UTC`,
+    `${who} joined as a guest using an invite from ${inviter}${inv.email && inv.code_mode === 'email' ? `, email verified (${maskEmail(inv.email)})` : inv.code_mode === 'link' ? ', let in from a join request' : ''}; access until ${expiresAt.slice(11, 16)} UTC`,
   );
-  systemNotice(inv.incident_id, `**${who}** joined as a **guest** (invited by ${inviter}${inv.email ? ', email verified' : ''})`);
+  systemNotice(inv.incident_id, `**${who}** joined as a **guest** (invited by ${inviter}${inv.email && inv.code_mode === 'email' ? ', email verified' : inv.code_mode === 'link' ? ', from a join request' : ''})`);
   logAdminAction(inv.created_by, g.id, 'guest_joined', who);
   await startGuestSession(res, g, inv.access_hours * 3600);
   refreshIncident(inv.incident_id);
@@ -756,7 +788,7 @@ async function acceptMember(req: Request, res: Response, inv: InviteRow, display
   const { addTimeline, systemNotice } = await import('./api.js');
   const { startSession } = await import('./auth.js');
   const inviter = getUser(inv.created_by)?.display_name ?? 'someone';
-  const how = inv.code_mode === 'manual' ? 'code from the inviter' : `email verified (${maskEmail(email)})`;
+  const how = inv.code_mode === 'manual' ? 'code from the inviter' : inv.code_mode === 'link' ? `let in from a join request (email ${maskEmail(email)} not verified)` : `email verified (${maskEmail(email)})`;
   if (!created) {
     // The account already exists: add it to the room, but never sign in as it here. Whoever made the
     // invite can always get its code, so signing in would let them take over any account by its email.
@@ -766,7 +798,7 @@ async function acceptMember(req: Request, res: Response, inv: InviteRow, display
     return res.json({ incidentId: inv.incident_id, signIn: true });
   }
   addTimeline(inv.incident_id, u.id, 'joined', `${u.display_name} joined as a responder using an invite from ${inviter}, ${how}`);
-  systemNotice(inv.incident_id, `**${u.display_name}** joined as a responder (invited by ${inviter}, ${inv.code_mode === 'manual' ? 'with a code from them' : 'email verified'})`);
+  systemNotice(inv.incident_id, `**${u.display_name}** joined as a responder (invited by ${inviter}, ${inv.code_mode === 'manual' ? 'with a code from them' : inv.code_mode === 'link' ? 'from a join request' : 'email verified'})`);
   logAdminAction(inv.created_by, u.id, 'member_invited_joined', `${u.display_name} <${maskEmail(email)}>`);
   await startSession(res, u);
   refreshIncident(inv.incident_id);

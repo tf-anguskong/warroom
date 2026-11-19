@@ -16,7 +16,7 @@ export function GuestTag({ user }: { user?: Pick<User, 'isGuest' | 'guestOrg'> |
   );
 }
 
-interface Scope {
+export interface Scope {
   channels: string[];
   voiceRooms: string[];
   sheets: string[];
@@ -32,7 +32,7 @@ const toIds = (s?: GuestScopeSummary): Scope => ({
 });
 
 /** Checklist of what a guest can see. Nothing is included unless ticked. */
-function ScopePicker({ state, scope, onChange }: { state: IncidentState; scope: Scope; onChange: (s: Scope) => void }) {
+export function ScopePicker({ state, scope, onChange }: { state: IncidentState; scope: Scope; onChange: (s: Scope) => void }) {
   const toggle = (key: 'channels' | 'voiceRooms' | 'sheets' | 'notes', id: string) =>
     onChange({ ...scope, [key]: scope[key].includes(id) ? scope[key].filter((x) => x !== id) : [...scope[key], id] });
   const group = (title: string, key: 'channels' | 'voiceRooms' | 'sheets' | 'notes', items: { id: string; name: string; prefix: string }[]) => (
@@ -63,11 +63,19 @@ function ScopePicker({ state, scope, onChange }: { state: IncidentState; scope: 
   );
 }
 
+/** Why this person can't add responders right now (no email to check the address), or null. */
+export function responderBlock(isAdmin: boolean, meta: { mode?: string; guestEmail: { enabled: boolean } }) {
+  if (isAdmin || meta.mode === 'now' || meta.guestEmail.enabled) return null;
+  return 'This War Room can’t send email, so a responder’s address can’t be checked: only an admin can add responders. Invite them as a guest, or ask an admin.';
+}
+
 export function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () => void }) {
   const { toast, meta, me } = useApp();
-  // Full responders (accounts) can be invited by admins, and in a quick War Room by whoever runs the room.
-  const canInviteMembers = me.isAdmin || (meta.mode === 'now' && state.canControl);
-  const [kind, setKind] = useState<'member' | 'guest'>(canInviteMembers && meta.mode === 'now' ? 'member' : 'guest');
+  // Full responders (accounts) can be invited by admins and whoever runs the room.
+  const canInviteMembers = me.isAdmin || state.canControl;
+  // Without email the address on a new account can't be checked, so only admins add responders then.
+  const memberBlocked = canInviteMembers ? responderBlock(me.isAdmin, meta) : null;
+  const [kind, setKind] = useState<'member' | 'guest'>(canInviteMembers && !memberBlocked && meta.mode === 'now' ? 'member' : 'guest');
   const member = kind === 'member';
   const [email, setEmail] = useState('');
   const main = state.voiceRooms.find((v) => v.kind === 'main');
@@ -166,7 +174,7 @@ export function InviteDialog({ state, onClose }: { state: IncidentState; onClose
       <form id="invite" className="form" onSubmit={submit}>
         {canInviteMembers && (
           <div className="seg kind-seg" role="radiogroup" aria-label="Invite as">
-            <button type="button" className={member ? 'on' : ''} onClick={() => setKind('member')}>
+            <button type="button" className={member ? 'on' : ''} onClick={() => setKind('member')} disabled={Boolean(memberBlocked)} title={memberBlocked ?? undefined}>
               Responder
             </button>
             <button type="button" className={!member ? 'on' : ''} onClick={() => setKind('guest')}>
@@ -174,6 +182,7 @@ export function InviteDialog({ state, onClose }: { state: IncidentState; onClose
             </button>
           </div>
         )}
+        {memberBlocked && <p className="muted small">{memberBlocked}</p>}
         <p className="muted small">
           {member
             ? 'A full member of the response team: sees the whole room, can take roles and tasks, and can sign back in later with a code. Use for your own people.'
@@ -327,7 +336,7 @@ export function GuestsSection({ state }: { state: IncidentState }) {
   const [codeInfo, setCodeInfo] = useState<{ code: string; forName: string; expiresInMinutes: number; signBackIn: boolean } | null>(null);
   const manage = state.canControl;
   const signIn = useSignInCode(state.incident.id);
-  const canInviteMembers = me.isAdmin || (meta.mode === 'now' && manage);
+  const canInviteMembers = me.isAdmin || manage;
   const newCode = (inviteId: string) =>
     api
       .post<{ code: string; forName: string; expiresInMinutes: number; signBackIn: boolean }>(`/api/invites/${inviteId}/code`)

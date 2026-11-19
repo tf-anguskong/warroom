@@ -37,6 +37,8 @@ server/src/
   email-login.ts  sign-in with emailed or admin-issued codes for accounts without SSO
   shifts.ts       shift schedule; a 30 s ticker sends reminders and start/end notices (flags on each row so each fires once)
   guests.ts       guest invites, scopes, deny-by-default route allowlist, email codes, sweeper
+  join-requests.ts  "Ask to join" from the room link (public /auth/rooms routes); admitting makes a normal invite.
+                  Requests are short-lived, so they're deliberately not in archives
   mail.ts         nodemailer transport (TLS required), dev outbox
   realtime.ts     Socket.IO: presence, incident rooms, guest-aware broadcast
   mentions.ts     <@user> / <@role:x> / <@here> tokens

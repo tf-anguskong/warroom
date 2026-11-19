@@ -53,6 +53,13 @@ export function Login() {
   const returnTo = safeReturnTo(params.get('returnTo'));
   const idp = IDP_NAME[params.get('provider') ?? ''] ?? 'your identity provider';
 
+  // Opened from a war room link: people without an account can ask to join instead.
+  const roomId = /^\/incidents\/([0-9a-f-]{36})$/.exec(returnTo)?.[1] ?? null;
+  const [room, setRoom] = useState<{ incidentKey: string } | null>(null);
+  useEffect(() => {
+    if (roomId) api.get<{ incidentKey: string }>(`/auth/rooms/${roomId}`).then(setRoom).catch(() => setRoom(null));
+  }, [roomId]);
+
   useEffect(() => {
     api
       .get<AuthConfig>('/auth/config')
@@ -82,6 +89,11 @@ export function Login() {
           </div>
         </div>
 
+        {room && (
+          <p className="small">
+            Sign in to join <span className="mono">{room.incidentKey}</span>.
+          </p>
+        )}
         {error && <div className="alert error">{ERRORS[error]?.(idp) ?? 'Sign-in failed.'}</div>}
         {cfgErr && <div className="alert error">{describeFailure(null)}</div>}
 
@@ -101,6 +113,17 @@ export function Login() {
               ? 'This is a temporary War Room. Join with the invite link you were sent; the admin can set up email so people can sign back in.'
               : 'Single sign-on isn’t set up yet. An admin can set up Okta or Microsoft Entra ID under Admin → Settings.'}
           </div>
+        )}
+
+        {room && roomId && (
+          <>
+            <div className="divider">
+              <span>No account?</span>
+            </div>
+            <a className="btn secondary block" href={`/ask/${roomId}`}>
+              Ask to join {room.incidentKey}
+            </a>
+          </>
         )}
 
         {cfg?.devAuth && (
