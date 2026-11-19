@@ -279,7 +279,12 @@ export function ChatView({
                     <Attachments files={m.attachments ?? []} />
                   </div>
                   <div className="msg-actions">
-                    <button className="icon-btn sm" title={m.pinned ? 'Unpin' : 'Pin'} onClick={() => togglePin(m)}>
+                    <button
+                      className="icon-btn sm"
+                      title={me.isGuest ? 'Guests can’t pin messages' : m.pinned ? 'Unpin' : 'Pin'}
+                      disabled={me.isGuest}
+                      onClick={() => togglePin(m)}
+                    >
                       {Icons.pin}
                     </button>
                     <div className="menu-wrap">

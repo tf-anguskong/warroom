@@ -6,7 +6,7 @@ import { guestCodeMail, mailStatus, sendMail } from './mail.js';
 import { newId, now, q, tx } from './db.js';
 import { createUser, getUser, isAdmin, logAdminAction, toPublic, updateUser, type UserRow } from './users.js';
 import { refreshIncident, resyncUserChannels, visibleChannelIds } from './realtime.js';
-import { codeSignInPossible, emailLoginEnabled, issueLoginCode } from './email-login.js';
+import { codeSignInPossible, emailCanSend, emailLoginEnabled, issueLoginCode } from './email-login.js';
 
 /**
  * Guests are people outside the identity provider (vendors, outside IR firms, counsel) who get a
@@ -414,8 +414,12 @@ export function signInCodeBlock(viewer: UserRow, incidentId: string, target: Use
   if (!q.get('SELECT 1 FROM incident_members WHERE incident_id = ? AND user_id = ?', incidentId, target.id)) return 'They aren’t in this room';
   if (!emailLoginEnabled()) return 'Signing in with a code is off (Admin → Settings → General → “Sign in with an emailed code”)';
   if (!codeSignInPossible(target)) return target.email ? 'They sign in with Okta or Entra' : 'Their account has no email';
-  if (!isAdmin(viewer) && isAdmin(target)) return 'They’re an admin: another admin gives them a code (Admin → People)';
-  if (!isAdmin(viewer) && target.id === commander) return 'Only an admin can give the Incident Commander a code';
+  // A sign-in code is the whole account, not just this room, and anyone can open a room and run it.
+  if (!isAdmin(viewer)) {
+    return emailCanSend()
+      ? 'Only an admin can give a responder a code. They can get one by email from the sign-in page.'
+      : 'Only an admin can give a responder a code (Admin → People)';
+  }
   return null;
 }
 
@@ -753,9 +757,17 @@ async function acceptMember(req: Request, res: Response, inv: InviteRow, display
   const { startSession } = await import('./auth.js');
   const inviter = getUser(inv.created_by)?.display_name ?? 'someone';
   const how = inv.code_mode === 'manual' ? 'code from the inviter' : `email verified (${maskEmail(email)})`;
+  if (!created) {
+    // The account already exists: add it to the room, but never sign in as it here. Whoever made the
+    // invite can always get its code, so signing in would let them take over any account by its email.
+    addTimeline(inv.incident_id, inv.created_by, 'joined', `${u.display_name} was added to the room with an invite from ${inviter} (existing account: they sign in as usual)`);
+    logAdminAction(inv.created_by, u.id, 'member_invite_used', `Existing account added to the room without signing in: ${u.display_name} <${maskEmail(email)}>`);
+    refreshIncident(inv.incident_id);
+    return res.json({ incidentId: inv.incident_id, signIn: true });
+  }
   addTimeline(inv.incident_id, u.id, 'joined', `${u.display_name} joined as a responder using an invite from ${inviter}, ${how}`);
   systemNotice(inv.incident_id, `**${u.display_name}** joined as a responder (invited by ${inviter}, ${inv.code_mode === 'manual' ? 'with a code from them' : 'email verified'})`);
-  logAdminAction(inv.created_by, u.id, created ? 'member_invited_joined' : 'member_invite_used', `${u.display_name} <${maskEmail(email)}>`);
+  logAdminAction(inv.created_by, u.id, 'member_invited_joined', `${u.display_name} <${maskEmail(email)}>`);
   await startSession(res, u);
   refreshIncident(inv.incident_id);
   res.json({ incidentId: inv.incident_id });

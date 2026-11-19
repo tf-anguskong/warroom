@@ -47,6 +47,8 @@ export function Join() {
   const [cooldown, setCooldown] = useState(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  /** Set when the invite was for an account that already exists: they've been added, and sign in as usual. */
+  const [addedTo, setAddedTo] = useState<string | null>(null);
   const codeBox = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -93,7 +95,12 @@ export function Join() {
     try {
       const r = resume
         ? await api.post<{ incidentId: string }>(`/auth/invite/${token}/resume`, { code })
-        : await api.post<{ incidentId: string }>(`/auth/invite/${token}/accept`, { displayName: name.trim(), code });
+        : await api.post<{ incidentId: string; signIn?: boolean }>(`/auth/invite/${token}/accept`, { displayName: name.trim(), code });
+      if ('signIn' in r && r.signIn) {
+        setAddedTo(r.incidentId);
+        setBusy(false);
+        return;
+      }
       location.href = `/incidents/${r.incidentId}`;
     } catch (e) {
       setErr(e instanceof ApiError ? e.message : 'Could not join. Try again.');
@@ -120,7 +127,18 @@ export function Join() {
           </div>
         </div>
 
-        {!info ? (
+        {addedTo ? (
+          <>
+            <div className="alert info">
+              <div>
+                You already have a War Room account, so you’ve been added to <strong>{info?.incidentKey}</strong>. Sign in the way you usually do to open it.
+              </div>
+            </div>
+            <a className="btn primary lg block" href={`/login?returnTo=${encodeURIComponent(`/incidents/${addedTo}`)}`}>
+              Sign in
+            </a>
+          </>
+        ) : !info ? (
           <div className="skeleton" />
         ) : info.status !== 'ok' && info.status !== 'resume' ? (
           <div className="alert error">{DEAD[info.status]}</div>
