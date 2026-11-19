@@ -218,7 +218,7 @@ export function RosterView({ state, presence, onOpenChannel }: { state: Incident
                           {id === me.id && <span className="muted"> (you)</span>}
                           <GuestTag user={user} />
                           <div className="muted small">
-                            {[...roles, state.roomAdmins.includes(id) ? 'Room admin' : null].filter(Boolean).join(' · ') || 'Responder'}
+                            {[...roles, state.roomAdmins.includes(id) ? 'Room admin' : null].filter(Boolean).join(' · ') || (user!.isGuest ? 'Guest' : user!.title || 'Responder')}
                           </div>
                           {awayOf(state, id) && <div className={`away-line ${isOverdue(awayOf(state, id), now) ? 'late' : ''}`}>{awayText(awayOf(state, id)!, now)}</div>}
                           {(() => {

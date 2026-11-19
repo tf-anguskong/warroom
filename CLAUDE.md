@@ -50,6 +50,8 @@ client/src/
   lib/            api, app context, socket, voice (LiveKit), format, formula
   styles.css      all styling; colour tokens on :root
 docs/CLAUDE_DESIGN_PROMPT.md   design brief for Claude Design; update it when screens change
+docs/SHOWCASE.md, docs/wiki/   executive tour and in-depth wiki; keep them in step with features and settings
+scripts/capture-showcase.mjs   seeds a fictional incident and regenerates docs/images (needs `npm run build` and Chrome)
 ```
 
 ## Rules that matter

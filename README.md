@@ -15,6 +15,10 @@ Prebuilt image (linux/amd64, linux/arm64): `ghcr.io/tf-anguskong/warroom`.
 
 Free for individuals, non-profits and small companies; larger companies need a commercial license. See [License](#license).
 
+**See it:** the **[showcase](docs/SHOWCASE.md)** is a short tour with screenshots. The **[wiki](docs/wiki/Home.md)** covers every feature and setting in depth.
+
+![A live war room](docs/images/room.png)
+
 ## What's in a war room
 
 - **Voice**: a Main Bridge plus any number of **breakout rooms**, with speaking indicators, mute/deafen, and **screen sharing**. Runs on a self-hosted [LiveKit](https://livekit.io) SFU, so 50+ people per room is fine.

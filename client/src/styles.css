@@ -2993,6 +2993,17 @@ label.template span {
   vertical-align: middle;
   flex: none;
 }
+/* In tight rows (voice lists) the name wins: a long organization shrinks to an ellipsis (full text on hover). */
+.voice-people .nav-label {
+  flex: 0 1 auto;
+  min-width: 4em;
+}
+.voice-people .guest-tag {
+  flex: 0 1 auto;
+  min-width: 3.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .guest-banner {
   background: color-mix(in srgb, #c9a2ff 16%, var(--bg-elev));
   border-bottom: 1px solid #c9a2ff;
