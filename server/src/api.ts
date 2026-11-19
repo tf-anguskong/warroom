@@ -20,6 +20,7 @@ import { adminGroupIds, adminSources, bus, getUser, isAdmin, logAdminAction, oth
 import { mailStatus } from './mail.js';
 import { mentionedUserIds, mentionsToText, resolveMentions } from './mentions.js';
 import { canSee, guestsOf } from './guests.js';
+import { notesFor, notesForExport } from './notes.js';
 import { linkedProviders, providerLabel, ssoProviders } from './sso.js';
 
 interface IncidentRow {
@@ -563,6 +564,7 @@ api.get(
       })),
       channels,
       sheets,
+      notes: notesFor(viewer, inc.id),
     };
   }),
 );
@@ -1334,6 +1336,8 @@ api.get(
        JOIN channels c ON c.id = m.channel_id WHERE c.incident_id = ? AND m.pinned = 1 ORDER BY m.created_at`,
       inc.id,
     );
+    const noteLines = notesForExport(inc.id);
+    if (noteLines.length) lines.push('', ...noteLines);
     if (pins.length) {
       lines.push('', '## Pinned messages', '');
       for (const p of pins) {

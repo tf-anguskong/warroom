@@ -37,6 +37,7 @@ Design the full UI for **War Room**, a self-hosted web app where IT and security
      - *Voice rooms*: "Main Bridge" pinned at top, then breakout rooms (e.g. "Forensics", "Network Containment", "Exec Briefing"). Each shows who's inside (avatars that light up when speaking, mute icon, screen-share icon). One-click join/switch. "+ Breakout room".
      - *Channels*: text channels. A channel can be attached to several voice rooms, and can be **shared from another incident** — show a clear badge like "↗ shared from INC-0039". Unread counts, mention badges.
      - *Sheets*: list of spreadsheets in the incident. "+ New sheet" with template picker.
+     - *Notes*: Markdown notepads, listed like sheets, with "+ New note" (Blank, Working notes, Shift handoff, Call notes) and a count of who has each open.
      - *Timeline* entry.
    - **Center (main view)** shows one of: a channel, a sheet, or the timeline. When anyone in my current voice room shares their screen, a **screen-share stage** appears at the top of the center area (collapsible, can go full-screen, shows who's sharing; handle multiple simultaneous shares as tiles).
    - **Right panel**, tabbed:
@@ -46,6 +47,8 @@ Design the full UI for **War Room**, a self-hosted web app where IT and security
    - **Voice control dock** (bottom of left sidebar or bottom bar, always visible while connected): current room name, connection quality, mute, deafen, screen share, device settings, leave. Muted state must be impossible to misread. Also show a "listen-only (no microphone)" state.
 
 5. **Channel view** — message list optimized for technical content: inline code and multi-line code blocks with copy buttons (people paste logs, commands, hashes), links, **@mentions** (people, roles like `@Incident Commander`, and `@here`; mentions of me are highlighted and the message gets a side marker; the composer shows an autocomplete list with avatars, role holders and who's in which voice room; channels with unread mentions show an @ badge distinct from the unread count), system messages (e.g. "Alex joined Forensics", "Severity raised to SEV1"). Hover actions: pin, **add to timeline** (mark as decision / action / finding), copy link. Composer: Enter sends, Shift+Enter newline, paste-friendly.
+
+6a. **Note view** — a calm writing surface: title (click to rename), avatars of who has it open, a quiet save status ("Saved · edited by Sam 2m ago" / "Saving…" / "Unsaved changes"), Edit / Split / Preview toggle, download .md, delete. A slim formatting toolbar (heading, bold, italic, list, checklist, code, code block, link, table). Split mode: monospace editor left, rendered Markdown right; checklist boxes in the preview can be ticked. When someone else saves while you have unsaved edits, a clear banner names them and offers Show their version / Use theirs / Keep mine. Guests can be given individual notes.
 
 6. **Native spreadsheet view** — a real grid, not a form:
    - Column letters (A, B, C…) and row numbers, sticky header row and first column, keyboard navigation (arrows, Tab, Enter to edit, Esc), visible selection.

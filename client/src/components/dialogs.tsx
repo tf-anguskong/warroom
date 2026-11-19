@@ -212,6 +212,57 @@ export function ChannelSettingsDialog({ state, channel, onClose }: { state: Inci
   );
 }
 
+export function NewNoteDialog({ incidentId, onClose, onCreated }: { incidentId: string; onClose: () => void; onCreated: (id: string) => void }) {
+  const [templates, setTemplates] = useState<{ key: string; label: string; description: string }[]>([]);
+  const [template, setTemplate] = useState('working');
+  const [name, setName] = useState('');
+  useEffect(() => {
+    api.get<{ templates: { key: string; label: string; description: string }[] }>('/api/note-templates').then((r) => setTemplates(r.templates));
+  }, []);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const r = await api.post<{ id: string }>(`/api/incidents/${incidentId}/notes`, { template, name });
+    onClose();
+    onCreated(r.id);
+  };
+  return (
+    <Modal
+      title="New note"
+      onClose={onClose}
+      wide
+      footer={
+        <>
+          <button className="btn ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" form="note">
+            Create note
+          </button>
+        </>
+      }
+    >
+      <form id="note" className="form" onSubmit={submit}>
+        <div className="template-grid">
+          {templates.map((t) => (
+            <label key={t.key} className={`template ${template === t.key ? 'on' : ''}`}>
+              <input type="radio" name="template" checked={template === t.key} onChange={() => setTemplate(t.key)} />
+              <span>
+                <strong>{t.label}</strong>
+                <small className="muted">{t.description}</small>
+              </span>
+            </label>
+          ))}
+        </div>
+        <label>
+          Name <span className="muted">(optional)</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder={templates.find((t) => t.key === template)?.label ?? 'Notes'} />
+        </label>
+        <p className="hint">Notes are Markdown, save automatically, and everyone in the war room sees changes live. They’re included in the postmortem export.</p>
+      </form>
+    </Modal>
+  );
+}
+
 export function NewSheetDialog({ incidentId, onClose, onCreated }: { incidentId: string; onClose: () => void; onCreated: (id: string) => void }) {
   const { meta } = useApp();
   const [template, setTemplate] = useState('ioc');

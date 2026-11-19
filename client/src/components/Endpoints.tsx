@@ -372,7 +372,7 @@ export function EndpointPanel({ endpoint: e, onOpenChannel }: { endpoint: Tracke
         <label className="grow">
           Why it's tracked
           {editNote === null ? (
-            <div className="note-view">
+            <div className="endpoint-note">
               <span className={e.note ? '' : 'muted'}>{e.note || 'No note'}</span>
               {e.active && (
                 <button className="btn ghost sm" onClick={() => setEditNote(e.note)}>

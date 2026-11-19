@@ -31,6 +31,7 @@ server/src/
   users.ts        user rows, admin sources, audit log (logAdminAction)
   scim.ts         SCIM 2.0 (Okta / Entra provisioning)
   api.ts          incidents, channels, messages, voice, roles, assignments, sheets, export, admin
+  notes.ts        Markdown notes; saves carry the version they started from (409 on conflict)
   guests.ts       guest invites, scopes, deny-by-default route allowlist, email codes, sweeper
   mail.ts         nodemailer transport (TLS required), dev outbox
   realtime.ts     Socket.IO: presence, incident rooms, guest-aware broadcast
@@ -57,7 +58,7 @@ docs/CLAUDE_DESIGN_PROMPT.md   design brief for Claude Design; update it when sc
 
 **Guests are deny-by-default.**
 - `requireAuth` runs `guestAllowed`. A new `/api` route is closed to guests unless it is added to `RULES` in `guests.ts` with a scope check.
-- Realtime: `emitToIncident` drops events for guests unless they are in `GUEST_EVENTS` or pass a per-socket `canSee` check. New events that carry channel, sheet or timeline content need that check.
+- Realtime: `emitToIncident` drops events for guests unless they are in `GUEST_EVENTS` or pass a per-socket `canSee` check (`timeline:*`, `sheet:*` with `sheetId`, `note:*` with `noteId`). New events that carry content need that check.
 - Guest users can't be admins, IC or room admins, and lose access when it expires, when the incident resolves, or when it's revoked.
 
 **Identity.**

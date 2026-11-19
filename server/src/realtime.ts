@@ -150,18 +150,19 @@ const GUEST_EVENTS = new Set(['incident:refresh', 'presence', 'voice:summon']);
 
 /**
  * Send to everyone in an incident's war room. Guests only get events on GUEST_EVENTS, plus
- * timeline and sheet events for what their invite lets them see.
+ * timeline, sheet and note events for what their invite lets them see.
  */
 export function emitToIncident(incidentId: string, event: string, data: unknown) {
   if (GUEST_EVENTS.has(event)) return void io.to(`incident:${incidentId}`).emit(event, data);
   io.to(`incident:${incidentId}`).except(`guests:${incidentId}`).emit(event, data);
-  const kind = event.startsWith('timeline:') ? 'timeline' : event.startsWith('sheet:') ? 'sheet' : null;
+  const kind = event.startsWith('timeline:') ? 'timeline' : event.startsWith('sheet:') ? 'sheet' : event.startsWith('note:') ? 'note' : null;
   if (!kind) return;
-  const sheetId = (data as { sheetId?: string })?.sheetId ?? '';
+  const d = data as { sheetId?: string; noteId?: string };
+  const thingId = (kind === 'note' ? d?.noteId : d?.sheetId) ?? '';
   for (const sid of io.sockets.adapter.rooms.get(`guests:${incidentId}`) ?? []) {
     const sock = io.sockets.sockets.get(sid) as Socket<any, any, any, SocketData> | undefined;
     const u = sock && getUser(sock.data.user.id);
-    if (u && canSee(u, incidentId, kind, sheetId)) sock!.emit(event, data);
+    if (u && canSee(u, incidentId, kind, thingId)) sock!.emit(event, data);
   }
 }
 

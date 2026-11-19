@@ -154,6 +154,7 @@ export function Join() {
                     {s?.channels.map((c) => <li key={c.id}># {c.name}</li>)}
                     {s?.voiceRooms.map((v) => <li key={v.id}>🔊 {v.name}</li>)}
                     {s?.sheets.map((x) => <li key={x.id}>▦ {x.name}</li>)}
+                    {s?.notes?.map((x) => <li key={x.id}>📝 {x.name}</li>)}
                     {s?.timeline && <li>🕑 Incident timeline</li>}
                   </ul>
                 </div>

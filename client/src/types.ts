@@ -17,6 +17,7 @@ export interface GuestScopeSummary {
   channels: { id: string; name: string }[];
   voiceRooms: { id: string; name: string }[];
   sheets: { id: string; name: string }[];
+  notes: { id: string; name: string }[];
   timeline: boolean;
 }
 
@@ -106,6 +107,7 @@ export interface IncidentState {
   voiceRooms: VoiceRoom[];
   channels: Channel[];
   sheets: { id: string; name: string }[];
+  notes: { id: string; name: string }[];
 }
 
 export interface Message {
@@ -176,6 +178,7 @@ export interface Meta {
 export type View =
   | { kind: 'channel'; id: string }
   | { kind: 'sheet'; id: string }
+  | { kind: 'note'; id: string }
   | { kind: 'timeline' }
   | { kind: 'investigate' }
   | { kind: 'roster' };

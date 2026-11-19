@@ -5,7 +5,7 @@ import { useVoice } from '../lib/voice';
 import { PERSON_DRAG, useModeration } from '../lib/moderation';
 import type { Channel, IncidentState, Presence, View } from '../types';
 import { Avatar, Icons } from './ui';
-import { ChannelSettingsDialog, NewBreakoutDialog, NewChannelDialog, NewSheetDialog } from './dialogs';
+import { ChannelSettingsDialog, NewBreakoutDialog, NewChannelDialog, NewNoteDialog, NewSheetDialog } from './dialogs';
 import { VoiceDock } from './VoiceDock';
 import { PersonActions } from './PersonActions';
 import { AssignDialog, type AssignTarget } from './AssignDialog';
@@ -24,7 +24,7 @@ interface Props {
 export function Sidebar({ state, presence, view, unread, mentions, onView, onJoinVoice }: Props) {
   const { me, toast, userById } = useApp();
   const voice = useVoice();
-  const [dialog, setDialog] = useState<null | 'breakout' | 'channel' | 'sheet' | { channel: Channel }>(null);
+  const [dialog, setDialog] = useState<null | 'breakout' | 'channel' | 'sheet' | 'note' | { channel: Channel }>(null);
   const [assign, setAssign] = useState<AssignTarget | null>(null);
   const asgFor = (kind: string, id: string) => state.assignments.filter((a) => a.targetKind === kind && a.targetId === id);
   const myAsg = state.assignments.filter((a) => a.userId === me.id);
@@ -236,6 +236,28 @@ export function Sidebar({ state, presence, view, unread, mentions, onView, onJoi
         </section>
 
         <section className="nav-section">
+          <div className="nav-head">
+            <span>Notes</span>
+            {!me.isGuest && <button className="icon-btn sm" title="New note" aria-label="New note" onClick={() => setDialog('note')}>
+              {Icons.plus}
+            </button>}
+          </div>
+          {state.notes.map((n) => {
+            const viewers = presence.filter((p) => p.view === `note:${n.id}` && p.userId !== me.id);
+            return (
+              <div key={n.id} className={`nav-item ${isActive({ kind: 'note', id: n.id }) ? 'active' : ''}`}>
+                <button className="nav-main" onClick={() => onView({ kind: 'note', id: n.id })}>
+                  <span className="nav-icon">{Icons.note}</span>
+                  <span className="nav-label">{n.name}</span>
+                  {viewers.length > 0 && <span className="count" title={viewers.map((v) => v.displayName).join(', ')}>{viewers.length}</span>}
+                </button>
+              </div>
+            );
+          })}
+          {state.notes.length === 0 && <div className="nav-empty">No notes yet</div>}
+        </section>
+
+        <section className="nav-section">
           {state.canSeeTimeline && <div className={`nav-item ${view.kind === 'timeline' ? 'active' : ''}`}>
             <button className="nav-main" onClick={() => onView({ kind: 'timeline' })}>
               <span className="nav-icon">{Icons.clock}</span>
@@ -263,6 +285,7 @@ export function Sidebar({ state, presence, view, unread, mentions, onView, onJoi
 
       {dialog === 'breakout' && <NewBreakoutDialog incidentId={state.incident.id} onClose={() => setDialog(null)} onCreated={(id) => onJoinVoice(id)} />}
       {dialog === 'channel' && <NewChannelDialog state={state} onClose={() => setDialog(null)} onCreated={(id) => onView({ kind: 'channel', id })} />}
+      {dialog === 'note' && <NewNoteDialog incidentId={state.incident.id} onClose={() => setDialog(null)} onCreated={(id) => onView({ kind: 'note', id })} />}
       {dialog === 'sheet' && <NewSheetDialog incidentId={state.incident.id} onClose={() => setDialog(null)} onCreated={(id) => onView({ kind: 'sheet', id })} />}
       {assign && <AssignDialog state={state} presence={presence} target={assign} onClose={() => setAssign(null)} />}
       {dialog && typeof dialog === 'object' && <ChannelSettingsDialog state={state} channel={dialog.channel} onClose={() => setDialog(null)} />}

@@ -91,6 +91,7 @@ export const Icons = {
   volume: svg(<><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" /></>),
   hash: svg(<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18" />),
   grid: svg(<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /></>),
+  note: svg(<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>),
   clock: svg(<><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>),
   plus: svg(<path d="M12 5v14M5 12h14" />),
   pin: svg(<><path d="M12 17v5M9 10.8V5h6v5.8l2 3.2H7z" /><path d="M8 5h8" /></>),

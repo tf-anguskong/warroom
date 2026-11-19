@@ -10,17 +10,18 @@ import { refreshIncident, resyncUserChannels, visibleChannelIds } from './realti
 /**
  * Guests are people outside the identity provider (vendors, outside IR firms, counsel) who get a
  * single-use link into ONE war room. What they can see is an explicit allowlist chosen on the
- * invite: channels, voice rooms, sheets, and whether they can read the timeline. Everything else
+ * invite: channels, voice rooms, sheets, notes, and whether they can read the timeline. Everything else
  * (other incidents, integrations, exports, structure changes) is denied.
  */
 export interface GuestScope {
   channels: string[];
   voiceRooms: string[];
   sheets: string[];
+  notes: string[];
   timeline: boolean;
 }
 
-const EMPTY: GuestScope = { channels: [], voiceRooms: [], sheets: [], timeline: false };
+const EMPTY: GuestScope = { channels: [], voiceRooms: [], sheets: [], notes: [], timeline: false };
 
 export function parseScope(raw: string | null | undefined): GuestScope {
   try {
@@ -29,6 +30,7 @@ export function parseScope(raw: string | null | undefined): GuestScope {
       channels: Array.isArray(s.channels) ? s.channels.map(String) : [],
       voiceRooms: Array.isArray(s.voiceRooms) ? s.voiceRooms.map(String) : [],
       sheets: Array.isArray(s.sheets) ? s.sheets.map(String) : [],
+      notes: Array.isArray(s.notes) ? s.notes.map(String) : [],
       timeline: s.timeline === true,
     };
   } catch {
@@ -43,10 +45,12 @@ function cleanScope(incidentId: string, raw: unknown): GuestScope {
   const ids = (sql: string) => new Set(q.all<{ id: string }>(sql, incidentId).map((r) => r.id));
   const rooms = ids('SELECT id FROM voice_rooms WHERE incident_id = ? AND archived = 0');
   const sheets = ids('SELECT id FROM sheets WHERE incident_id = ?');
+  const notes = ids('SELECT id FROM notes WHERE incident_id = ?');
   return {
     channels: [...new Set(s.channels)].filter((c) => channels.has(c)),
     voiceRooms: [...new Set(s.voiceRooms)].filter((v) => rooms.has(v)),
     sheets: [...new Set(s.sheets)].filter((x) => sheets.has(x)),
+    notes: [...new Set(s.notes)].filter((x) => notes.has(x)),
     timeline: s.timeline,
   };
 }
@@ -54,13 +58,14 @@ function cleanScope(incidentId: string, raw: unknown): GuestScope {
 export const isGuest = (u: UserRow | undefined | null) => Boolean(u?.is_guest);
 
 /** Can this user see this thing inside this incident? Always true for members of the organization. */
-export function canSee(user: UserRow, incidentId: string, kind: 'channel' | 'voice' | 'sheet' | 'timeline', id = ''): boolean {
+export function canSee(user: UserRow, incidentId: string, kind: 'channel' | 'voice' | 'sheet' | 'note' | 'timeline', id = ''): boolean {
   if (!user.is_guest) return true;
   if (user.guest_incident_id !== incidentId) return false;
   const s = parseScope(user.guest_scope);
   if (kind === 'timeline') return s.timeline;
   if (kind === 'channel') return s.channels.includes(id) && visibleChannelIds(incidentId).includes(id);
   if (kind === 'voice') return s.voiceRooms.includes(id);
+  if (kind === 'note') return s.notes.includes(id);
   return s.sheets.includes(id);
 }
 
@@ -77,6 +82,7 @@ export function guestSessionValid(user: UserRow) {
 const lookup = {
   channelOf: (messageId: string) => q.get<{ channel_id: string }>('SELECT channel_id FROM messages WHERE id = ?', messageId)?.channel_id ?? '',
   roomIncident: (id: string) => q.get<{ incident_id: string }>('SELECT incident_id FROM voice_rooms WHERE id = ?', id)?.incident_id ?? '',
+  noteIncident: (id: string) => q.get<{ incident_id: string }>('SELECT incident_id FROM notes WHERE id = ?', id)?.incident_id ?? '',
   sheetIncident: (id: string) => q.get<{ incident_id: string }>('SELECT incident_id FROM sheets WHERE id = ?', id)?.incident_id ?? '',
   timelineIncident: (id: string) => q.get<{ incident_id: string }>('SELECT incident_id FROM timeline WHERE id = ?', id)?.incident_id ?? '',
 };
@@ -97,6 +103,8 @@ const RULES: Rule[] = [
   ['POST', new RegExp(`^/api/channels/${ID}/(messages|mentions/read)$`), (u, inc, m) => canSee(u, inc, 'channel', m[1])],
   ['PATCH', new RegExp(`^/api/messages/${ID}$`), (u, inc, m) => canSee(u, inc, 'channel', lookup.channelOf(m[1]))],
   ['POST', new RegExp(`^/api/voice-rooms/${ID}/token$`), (u, inc, m) => lookup.roomIncident(m[1]) === inc && canSee(u, inc, 'voice', m[1])],
+  ['GET', new RegExp(`^/api/notes/${ID}$`), (u, inc, m) => lookup.noteIncident(m[1]) === inc && canSee(u, inc, 'note', m[1])],
+  ['PUT', new RegExp(`^/api/notes/${ID}/body$`), (u, inc, m) => lookup.noteIncident(m[1]) === inc && canSee(u, inc, 'note', m[1])],
   ['GET', new RegExp(`^/api/sheets/${ID}$`), (u, inc, m) => lookup.sheetIncident(m[1]) === inc && canSee(u, inc, 'sheet', m[1])],
   ['PUT', new RegExp(`^/api/sheets/${ID}/cells$`), (u, inc, m) => lookup.sheetIncident(m[1]) === inc && canSee(u, inc, 'sheet', m[1])],
   ['POST', new RegExp(`^/api/sheets/${ID}/rows$`), (u, inc, m) => lookup.sheetIncident(m[1]) === inc && canSee(u, inc, 'sheet', m[1])],
@@ -160,6 +168,7 @@ function scopeSummary(incidentId: string, s: GuestScope) {
     channels: s.channels.map((c) => ({ id: c, name: name('SELECT name FROM channels WHERE id = ?', c) ?? 'channel' })),
     voiceRooms: s.voiceRooms.map((v) => ({ id: v, name: name('SELECT name FROM voice_rooms WHERE id = ?', v) ?? 'voice room' })),
     sheets: s.sheets.map((x) => ({ id: x, name: name('SELECT name FROM sheets WHERE id = ?', x) ?? 'sheet' })),
+    notes: s.notes.map((x) => ({ id: x, name: name('SELECT name FROM notes WHERE id = ?', x) ?? 'note' })),
     timeline: s.timeline,
     incidentId,
   };
@@ -243,8 +252,8 @@ guestsRouter.post(
     const linkHours = LINK_HOURS.includes(Number(req.body?.linkHours)) ? Number(req.body.linkHours) : 24;
     const accessHours = ACCESS_HOURS.includes(Number(req.body?.accessHours)) ? Number(req.body.accessHours) : 12;
     const scope = cleanScope(inc.id, req.body?.scope);
-    if (!scope.channels.length && !scope.voiceRooms.length && !scope.sheets.length) {
-      throw new HttpError(400, 'Give the guest access to at least one channel, voice room or sheet');
+    if (!scope.channels.length && !scope.voiceRooms.length && !scope.sheets.length && !scope.notes.length) {
+      throw new HttpError(400, 'Give the guest access to at least one channel, voice room, sheet or note');
     }
     const email = str(req.body?.email, 254).toLowerCase();
     if (email && !EMAIL_RE.test(email)) throw new HttpError(400, 'That email address doesn’t look right');
@@ -346,6 +355,7 @@ guestsRouter.put(
         ...s.channels.map((c) => `#${c.name}`),
         ...s.voiceRooms.map((v) => v.name),
         ...s.sheets.map((x) => x.name),
+        ...s.notes.map((x) => x.name),
         ...(s.timeline ? ['timeline'] : []),
       ].join(', ') || 'nothing'}`,
     );

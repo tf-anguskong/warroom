@@ -11,6 +11,7 @@ import { DetailsPanel } from '../components/DetailsPanel';
 import { ScreenStage } from '../components/ScreenStage';
 import { ChatView } from '../components/ChatView';
 import { SheetView } from '../components/SheetView';
+import { NoteView } from '../components/NoteView';
 import { TimelineView } from '../components/TimelineView';
 import { InvestigateView } from '../components/InvestigateView';
 import { RosterView } from '../components/RosterView';
@@ -32,7 +33,7 @@ function parseView(s: string | null): View | null {
   if (s === 'investigate') return { kind: 'investigate' };
   if (s === 'roster') return { kind: 'roster' };
   const [kind, id] = s.split(':');
-  if ((kind === 'channel' || kind === 'sheet') && id) return { kind, id };
+  if ((kind === 'channel' || kind === 'sheet' || kind === 'note') && id) return { kind, id };
   return null;
 }
 
@@ -64,6 +65,7 @@ function Room({ incidentId }: { incidentId: string }) {
     if (!state) return null;
     if (requested?.kind === 'channel' && state.channels.some((c) => c.id === requested.id)) return requested;
     if (requested?.kind === 'sheet' && state.sheets.some((s) => s.id === requested.id)) return requested;
+    if (requested?.kind === 'note' && state.notes.some((n) => n.id === requested.id)) return requested;
     if (requested?.kind === 'timeline' || requested?.kind === 'investigate' || requested?.kind === 'roster') return requested;
     return state.channels[0] ? { kind: 'channel', id: state.channels[0].id } : { kind: 'timeline' };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -223,7 +225,7 @@ function Room({ incidentId }: { incidentId: string }) {
       const ch = vr?.channelIds[0];
       if (!ch) return;
       // Don't pull someone off a sheet they're working in; otherwise open the room's channel.
-      if (viewRef.current?.kind !== 'sheet') setView({ kind: 'channel', id: ch });
+      if (viewRef.current?.kind !== 'sheet' && viewRef.current?.kind !== 'note') setView({ kind: 'channel', id: ch });
     },
     [voice, state, setView],
   );
@@ -265,6 +267,7 @@ function Room({ incidentId }: { incidentId: string }) {
         <div className="room-view">
           {view.kind === 'channel' && <ChatView key={view.id} channelId={view.id} state={state} presence={presence} />}
           {view.kind === 'sheet' && <SheetView key={view.id} sheetId={view.id} state={state} presence={presence} />}
+          {view.kind === 'note' && <NoteView key={view.id} noteId={view.id} state={state} presence={presence} />}
           {view.kind === 'timeline' && <TimelineView state={state} onOpenChannel={(id) => setView({ kind: 'channel', id })} />}
           {view.kind === 'roster' && <RosterView state={state} presence={presence} onOpenChannel={(id) => setView({ kind: 'channel', id })} />}
           {view.kind === 'investigate' && (

@@ -19,20 +19,22 @@ interface Scope {
   channels: string[];
   voiceRooms: string[];
   sheets: string[];
+  notes: string[];
   timeline: boolean;
 }
 const toIds = (s?: GuestScopeSummary): Scope => ({
   channels: s?.channels.map((c) => c.id) ?? [],
   voiceRooms: s?.voiceRooms.map((v) => v.id) ?? [],
   sheets: s?.sheets.map((x) => x.id) ?? [],
+  notes: s?.notes?.map((x) => x.id) ?? [],
   timeline: s?.timeline ?? false,
 });
 
 /** Checklist of what a guest can see. Nothing is included unless ticked. */
 function ScopePicker({ state, scope, onChange }: { state: IncidentState; scope: Scope; onChange: (s: Scope) => void }) {
-  const toggle = (key: 'channels' | 'voiceRooms' | 'sheets', id: string) =>
+  const toggle = (key: 'channels' | 'voiceRooms' | 'sheets' | 'notes', id: string) =>
     onChange({ ...scope, [key]: scope[key].includes(id) ? scope[key].filter((x) => x !== id) : [...scope[key], id] });
-  const group = (title: string, key: 'channels' | 'voiceRooms' | 'sheets', items: { id: string; name: string; prefix: string }[]) => (
+  const group = (title: string, key: 'channels' | 'voiceRooms' | 'sheets' | 'notes', items: { id: string; name: string; prefix: string }[]) => (
     <fieldset className="scope-group">
       <legend>{title}</legend>
       {items.length === 0 && <span className="muted small">None in this war room</span>}
@@ -49,6 +51,7 @@ function ScopePicker({ state, scope, onChange }: { state: IncidentState; scope: 
       {group('Channels', 'channels', state.channels.map((c) => ({ id: c.id, name: c.name, prefix: '# ' })))}
       {group('Voice rooms', 'voiceRooms', state.voiceRooms.map((v) => ({ id: v.id, name: v.name, prefix: '' })))}
       {group('Sheets', 'sheets', state.sheets.map((s) => ({ id: s.id, name: s.name, prefix: '' })))}
+      {group('Notes', 'notes', state.notes.map((n) => ({ id: n.id, name: n.name, prefix: '' })))}
       <fieldset className="scope-group">
         <legend>Other</legend>
         <label className="check">
@@ -69,7 +72,7 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
   const [note, setNote] = useState('');
   const [linkHours, setLinkHours] = useState(24);
   const [accessHours, setAccessHours] = useState(12);
-  const [scope, setScope] = useState<Scope>({ channels: general ? [general.id] : [], voiceRooms: main ? [main.id] : [], sheets: [], timeline: false });
+  const [scope, setScope] = useState<Scope>({ channels: general ? [general.id] : [], voiceRooms: main ? [main.id] : [], sheets: [], notes: [], timeline: false });
   const [created, setCreated] = useState<{ url: string; expiresAt: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -113,7 +116,7 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
     );
   }
 
-  const nothing = !scope.channels.length && !scope.voiceRooms.length && !scope.sheets.length;
+  const nothing = !scope.channels.length && !scope.voiceRooms.length && !scope.sheets.length && !scope.notes.length;
   return (
     <Modal
       title="Invite a guest"
@@ -186,7 +189,7 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
             </select>
           </label>
         </div>
-        {nothing && <div className="warn-text small">Tick at least one channel, voice room or sheet.</div>}
+        {nothing && <div className="warn-text small">Tick at least one channel, voice room, sheet or note.</div>}
       </form>
     </Modal>
   );
@@ -296,7 +299,7 @@ export function GuestsSection({ state }: { state: IncidentState }) {
             </div>
             {g.scope && (
               <div className="guest-scope small">
-                {[...g.scope.channels.map((c) => `#${c.name}`), ...g.scope.voiceRooms.map((v) => v.name), ...g.scope.sheets.map((x) => x.name), ...(g.scope.timeline ? ['Timeline'] : [])].join(' · ') ||
+                {[...g.scope.channels.map((c) => `#${c.name}`), ...g.scope.voiceRooms.map((v) => v.name), ...g.scope.sheets.map((x) => x.name), ...(g.scope.notes ?? []).map((x) => x.name), ...(g.scope.timeline ? ['Timeline'] : [])].join(' · ') ||
                   'No access'}
               </div>
             )}
