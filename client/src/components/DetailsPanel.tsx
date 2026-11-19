@@ -250,6 +250,7 @@ export function DetailsPanel({ state, presence }: { state: IncidentState; presen
                   <li key={id} title={`${u?.displayName ?? 'Someone'} isn’t connected right now`}>
                     <Avatar id={id} name={u?.displayName ?? '?'} size={24} away={Boolean(away)} />
                     {personInfo(id, u?.displayName ?? 'Someone', away)}
+                    {id !== me.id && <PersonActions state={state} person={{ userId: id, displayName: u?.displayName ?? 'Someone' }} online={false} />}
                   </li>
                 );
               })}

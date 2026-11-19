@@ -3,6 +3,7 @@ import { api } from '../lib/api';
 import { useApp } from '../lib/app';
 import { getSocket } from '../lib/socket';
 import type { Guest, GuestScopeSummary, IncidentState, User } from '../types';
+import { useSignInCode } from './SignInCode';
 import { Avatar, Icons, Modal } from './ui';
 
 /** Unmissable "this person is a guest" marker, used everywhere a name appears. */
@@ -325,6 +326,7 @@ export function GuestsSection({ state }: { state: IncidentState }) {
   const [dialog, setDialog] = useState<null | 'invite' | { access: Guest }>(null);
   const [codeInfo, setCodeInfo] = useState<{ code: string; forName: string; expiresInMinutes: number; signBackIn: boolean } | null>(null);
   const manage = state.canControl;
+  const signIn = useSignInCode(state.incident.id);
   const canInviteMembers = me.isAdmin || (meta.mode === 'now' && manage);
   const newCode = (inviteId: string) =>
     api
@@ -385,11 +387,21 @@ export function GuestsSection({ state }: { state: IncidentState }) {
                 <button className="btn ghost sm" onClick={() => setDialog({ access: g })}>
                   Change access
                 </button>
-                {invites.some((i) => i.usedBy === g.id) && (
-                  <button className="btn ghost sm" title="A code they can use with their invite link to sign back in" onClick={() => newCode(invites.find((i) => i.usedBy === g.id)!.id)}>
-                    Sign-in code
-                  </button>
-                )}
+                {(() => {
+                  const block = state.members.find((m) => m.userId === g.id)?.codeBlock;
+                  return (
+                    block !== undefined && (
+                      <button
+                        className="btn ghost sm"
+                        disabled={block !== null}
+                        title={block ?? 'A new link and one-time code to get back in (dropped off, new device). The old link stops working.'}
+                        onClick={() => signIn.request(g.id, g.displayName)}
+                      >
+                        Sign-in code
+                      </button>
+                    )
+                  );
+                })()}
                 <button className="btn ghost sm danger-text" onClick={() => end(g)}>
                   End access
                 </button>
@@ -431,6 +443,7 @@ export function GuestsSection({ state }: { state: IncidentState }) {
       )}
       {dialog === 'invite' && <InviteDialog state={state} onClose={() => (setDialog(null), load())} />}
       {codeInfo && <CodeDialog info={codeInfo} onClose={() => setCodeInfo(null)} />}
+      {signIn.dialog}
       {dialog && typeof dialog === 'object' && <AccessDialog state={state} guest={dialog.access} onClose={() => setDialog(null)} />}
     </section>
   );

@@ -1552,6 +1552,19 @@ label.template span {
 .menu button:hover {
   background: var(--bg-hover);
 }
+.menu button:disabled {
+  color: var(--text-3);
+  cursor: not-allowed;
+}
+.menu button:disabled:hover {
+  background: transparent;
+}
+.menu-note {
+  font-size: 11px;
+  color: var(--text-3);
+  padding: 0 10px 6px 30px;
+  max-width: 240px;
+}
 .menu-label {
   font-size: 11px;
   color: var(--text-3);
@@ -4520,6 +4533,7 @@ tr.alert-detail .codeblock {
   font-size: 12px;
   color: var(--text-2);
 }
-.people.offline li {
+/* Fade the person, not their actions menu (or the dialog it opens). */
+.people.offline li > :not(.person-actions) {
   opacity: 0.6;
 }

@@ -176,7 +176,7 @@ function EmailLogin({ returnTo, first, canSend }: { returnTo: string; first: boo
           </button>
           <p className="hint">For people invited to this War Room by email. You’ll get a 6-digit code that works once.</p>
           <button type="button" className="link-btn small" onClick={() => (setSent(true), setGiven(true), setErr(null))}>
-            I already have a code from an admin
+            I already have a code
           </button>
         </>
       ) : (
@@ -188,7 +188,7 @@ function EmailLogin({ returnTo, first, canSend }: { returnTo: string; first: boo
                 <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" required autoFocus />
               </label>
               <div className="small muted">
-                {canSend ? 'Enter the sign-in code an admin gave you.' : 'This War Room doesn’t send email: ask an admin for a sign-in code (Admin → People → Sign-in code), then enter it here.'}
+                {canSend ? 'Enter the sign-in code an admin or the person running your room gave you.' : 'This War Room doesn’t send email: ask the person running your room (or an admin) for a sign-in code, then enter it here.'}
               </div>
             </>
           ) : (

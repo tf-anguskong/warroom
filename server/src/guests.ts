@@ -6,6 +6,7 @@ import { guestCodeMail, mailStatus, sendMail } from './mail.js';
 import { newId, now, q, tx } from './db.js';
 import { createUser, getUser, isAdmin, logAdminAction, toPublic, updateUser, type UserRow } from './users.js';
 import { refreshIncident, resyncUserChannels, visibleChannelIds } from './realtime.js';
+import { codeSignInPossible, emailLoginEnabled, issueLoginCode } from './email-login.js';
 
 /**
  * Guests are people outside the identity provider (vendors, outside IR firms, counsel) who get a
@@ -383,6 +384,77 @@ guestsRouter.post(
     const { addTimeline } = await import('./api.js');
     addTimeline(inv.incident_id, req.user!.id, 'guest', `${req.user!.display_name} issued a new code for ${guest ? guest.display_name : `the invite for ${inv.label}`}`);
     return { code, expiresInMinutes: minutes, forName: guest?.display_name ?? inv.label, signBackIn: Boolean(guest) };
+  }),
+);
+
+// ---------- getting back in: a new sign-in code from whoever runs the room ----------
+
+const REJOIN_MINUTES = 30;
+
+/** The invite a guest joined with, if they can still sign back in with it. */
+function guestInvite(g: UserRow) {
+  const inv = q.get<InviteRow>('SELECT * FROM invites WHERE used_by = ? AND revoked_at IS NULL ORDER BY used_at DESC LIMIT 1', g.id);
+  // Unlike resumableGuest, a guest who joined without a code can still be given one here.
+  return inv && guestUsable(g) ? inv : null;
+}
+const guestUsable = (g: UserRow) => g.active && !g.deleted && guestSessionValid(g);
+
+/**
+ * Why someone who runs the room can't hand this person a new sign-in code, or null if they can.
+ * For people who dropped off (network, closed laptop, new device) and can't get back in on their own.
+ * Admins and the Incident Commander get codes only from an app admin, so a room admin can't take over their account.
+ */
+export function signInCodeBlock(viewer: UserRow, incidentId: string, target: UserRow, commander: string | null): string | null {
+  if (target.id === viewer.id) return 'That’s you';
+  if (!target.active || target.deleted) return 'Their account is deactivated';
+  if (target.is_guest) {
+    if (target.guest_incident_id !== incidentId) return 'They’re a guest in another room';
+    return guestInvite(target) ? null : 'Their guest access has ended; invite them again';
+  }
+  if (!q.get('SELECT 1 FROM incident_members WHERE incident_id = ? AND user_id = ?', incidentId, target.id)) return 'They aren’t in this room';
+  if (!emailLoginEnabled()) return 'Signing in with a code is off (Admin → Settings → General → “Sign in with an emailed code”)';
+  if (!codeSignInPossible(target)) return target.email ? 'They sign in with Okta or Entra' : 'Their account has no email';
+  if (!isAdmin(viewer) && isAdmin(target)) return 'They’re an admin: another admin gives them a code (Admin → People)';
+  if (!isAdmin(viewer) && target.id === commander) return 'Only an admin can give the Incident Commander a code';
+  return null;
+}
+
+/**
+ * A new way back in for someone in this room, shown once to whoever runs it to pass on directly.
+ * Guest: a fresh link (the old one stops working) plus a code. Responder: a code for the sign-in page.
+ */
+guestsRouter.post(
+  '/incidents/:id/people/:userId/sign-in-code',
+  h(async (req) => {
+    const inc = await requireControl(req, req.params.id);
+    if (inc.status === 'resolved') throw new HttpError(400, 'This incident is resolved');
+    const target = getUser(req.params.userId);
+    if (!target) throw new HttpError(404, 'person not found');
+    const { addTimeline, commanderOf } = await import('./api.js');
+    const blocked = signInCodeBlock(req.user!, inc.id, target, commanderOf(inc.id));
+    if (blocked) throw new HttpError(400, blocked);
+    const by = req.user!.display_name;
+    if (target.is_guest) {
+      const inv = guestInvite(target)!;
+      const token = randomBytes(32).toString('base64url');
+      const code = newCode();
+      q.run(
+        // A guest who joined without a code needs one from now on, so the new link alone isn't enough.
+        `UPDATE invites SET token_hash = ?, code_mode = CASE WHEN email IS NULL OR email = '' THEN 'manual' ELSE code_mode END,
+           code_hash = ?, code_expires_at = ?, code_attempts = 0 WHERE id = ?`,
+        hashToken(token),
+        hashCode(inv.id, code),
+        new Date(Date.now() + REJOIN_MINUTES * 60_000).toISOString(),
+        inv.id,
+      );
+      addTimeline(inc.id, req.user!.id, 'access', `${by} gave ${target.display_name} a new guest link and sign-in code (the old link no longer works)`);
+      logAdminAction(req.user!.id, target.id, 'guest_rejoin_code', `New link and code, ${REJOIN_MINUTES} minutes`);
+      return { kind: 'guest', forName: target.display_name, code, url: `${config.publicUrl}/join/${token}`, expiresInMinutes: REJOIN_MINUTES };
+    }
+    const code = issueLoginCode(target, REJOIN_MINUTES);
+    addTimeline(inc.id, req.user!.id, 'access', `${by} gave ${target.display_name} a new sign-in code`);
+    logAdminAction(req.user!.id, target.id, 'login_code_issued', `From the room, ${REJOIN_MINUTES} minutes`);
+    return { kind: 'member', forName: target.display_name, code, email: target.email, url: `${config.publicUrl}/login`, expiresInMinutes: REJOIN_MINUTES };
   }),
 );
 

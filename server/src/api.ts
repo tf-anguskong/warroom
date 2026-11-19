@@ -20,7 +20,7 @@ import { ROLES, SEVERITIES, SHEET_TEMPLATES, STATUSES, type Column } from './tem
 import { adminGroupIds, adminSources, bus, getUser, isAdmin, logAdminAction, otherActiveAdmins, toPublic, updateUser, type UserRow } from './users.js';
 import { mailStatus } from './mail.js';
 import { mentionedUserIds, mentionsToText, resolveMentions } from './mentions.js';
-import { canSee, guestsOf } from './guests.js';
+import { canSee, guestsOf, signInCodeBlock } from './guests.js';
 import { notesFor, notesForExport } from './notes.js';
 import { attachmentsOf, attachToMessage, filesForExport, pendingUploads } from './files.js';
 import { shiftsForExport, shiftsOf } from './shifts.js';
@@ -262,6 +262,7 @@ const roomAdminIds = (incidentId: string) =>
     .all<{ user_id: string }>('SELECT user_id FROM incident_room_admins WHERE incident_id = ? ORDER BY granted_at', incidentId)
     .map((r) => r.user_id);
 
+export const commanderOf = (incidentId: string) => commanderId(incidentId);
 const commanderId = (incidentId: string) =>
   q.get<{ user_id: string }>("SELECT user_id FROM incident_roles WHERE incident_id = ? AND role = 'commander'", incidentId)?.user_id ?? null;
 
@@ -580,6 +581,18 @@ api.get(
           taskBy: m.task_by,
           taskAt: m.task_at,
           away: m.away_since ? { since: m.away_since, until: m.away_until, note: m.away_note } : null,
+          // For whoever runs the room: can they give this person a new sign-in code? (null = yes, else why not)
+          ...(manageGuests
+            ? {
+                codeBlock:
+                  inc.status === 'resolved'
+                    ? 'This incident is resolved'
+                    : (() => {
+                        const t = getUser(m.user_id);
+                        return t ? signInCodeBlock(viewer, inc.id, t, commanderId(inc.id)) : 'Account not found';
+                      })(),
+              }
+            : {}),
         })),
       guests: guestsOf(inc.id, viewer, manageGuests),
       // Pending asks for command: everyone in the room can see who asked (it's on the timeline anyway).

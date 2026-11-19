@@ -125,18 +125,28 @@ emailLoginRouter.post('/auth/email/verify', async (req, res) => {
  * isn't arriving). Same account rules as emailed codes; 15 minutes; replaces any earlier code.
  */
 export const loginCodeRouter = Router();
+
+/** Can this account sign in with a code (email sign-in on, an email, no Okta / Entra identity, active)? */
+export const codeSignInPossible = (u: UserRow) => emailLoginEnabled() && Boolean(u.email) && eligible(u.email!)?.id === u.id;
+
+/** Make a one-time sign-in code for an account (replacing any earlier one) and return it. */
+export function issueLoginCode(u: UserRow, minutes: number) {
+  const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+  q.run(
+    `INSERT INTO login_codes (email, code_hash, expires_at, attempts, sends) VALUES (?, ?, ?, 0, '[]')
+     ON CONFLICT(email) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = 0`,
+    u.email!.toLowerCase(), hash(u.email!, code), new Date(Date.now() + minutes * 60e3).toISOString(),
+  );
+  return code;
+}
+
 loginCodeRouter.post('/admin/users/:id/login-code', async (req, res) => {
   const admin = req.user!;
   if (!isAdmin(admin)) return res.status(403).json({ error: 'admins only' });
   const u = getUser(req.params.id);
   if (!u || !u.email) return res.status(404).json({ error: 'That person has no email on their account' });
   if (!eligible(u.email) || eligible(u.email)!.id !== u.id) return res.status(400).json({ error: 'This account signs in with Okta or Entra, or is a guest or deactivated' });
-  const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
-  q.run(
-    `INSERT INTO login_codes (email, code_hash, expires_at, attempts, sends) VALUES (?, ?, ?, 0, '[]')
-     ON CONFLICT(email) DO UPDATE SET code_hash = excluded.code_hash, expires_at = excluded.expires_at, attempts = 0`,
-    u.email.toLowerCase(), hash(u.email, code), new Date(Date.now() + 15 * 60e3).toISOString(),
-  );
+  const code = issueLoginCode(u, 15);
   logAdminAction(admin.id, u.id, 'login_code_issued', 'One-time sign-in code (15 minutes)');
   res.json({ code, email: u.email, expiresInMinutes: 15 });
 });

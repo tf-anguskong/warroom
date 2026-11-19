@@ -232,6 +232,9 @@ if (!memberCols.has('away_since')) {
            ALTER TABLE incident_members ADD COLUMN away_until TEXT;
            ALTER TABLE incident_members ADD COLUMN away_note TEXT NOT NULL DEFAULT '';`);
 }
+// Last presence written to the timeline (comings and goings), so restarts and reloads don't repeat it.
+if (!memberCols.has('present')) db.exec('ALTER TABLE incident_members ADD COLUMN present INTEGER NOT NULL DEFAULT 0;');
+if (!memberCols.has('present_voice')) db.exec('ALTER TABLE incident_members ADD COLUMN present_voice TEXT;');
 const vrCols = new Set((db.prepare('PRAGMA table_info(voice_rooms)').all() as { name: string }[]).map((c) => c.name));
 if (!vrCols.has('objective')) {
   db.exec(`ALTER TABLE voice_rooms ADD COLUMN objective TEXT NOT NULL DEFAULT '';

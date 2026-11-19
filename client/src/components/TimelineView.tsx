@@ -7,6 +7,7 @@ import type { IncidentState, TimelineEntry } from '../types';
 import { Icons } from './ui';
 
 const HUMAN = new Set(['note', 'decision', 'action', 'finding', 'pin']);
+const PEOPLE = new Set(['joined', 'presence', 'guest', 'access']);
 const TYPE_LABEL: Record<string, string> = {
   declared: 'Declared',
   status: 'Status',
@@ -16,6 +17,9 @@ const TYPE_LABEL: Record<string, string> = {
   channel: 'Channel',
   sheet: 'Sheet',
   joined: 'Joined',
+  presence: 'In / out',
+  guest: 'Invite',
+  access: 'Access',
   summary: 'Summary',
   note: 'Note',
   decision: 'Decision',
@@ -30,6 +34,7 @@ const TYPE_LABEL: Record<string, string> = {
 const FILTERS = [
   { key: 'key', label: 'Key events' },
   { key: 'human', label: 'Notes & decisions' },
+  { key: 'people', label: 'Comings & goings' },
   { key: 'all', label: 'Everything' },
 ] as const;
 
@@ -63,7 +68,9 @@ export function TimelineView({ state, onOpenChannel }: { state: IncidentState; o
     if (!entries) return [];
     if (filter === 'all') return entries;
     if (filter === 'human') return entries.filter((e) => HUMAN.has(e.type));
-    return entries.filter((e) => e.type !== 'joined');
+    if (filter === 'people') return entries.filter((e) => PEOPLE.has(e.type));
+    // Room and voice comings and goings are many; they have their own filter.
+    return entries.filter((e) => e.type !== 'joined' && e.type !== 'presence');
   }, [entries, filter]);
 
   const add = async (e: FormEvent) => {

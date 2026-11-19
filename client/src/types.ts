@@ -87,6 +87,8 @@ export interface Member {
   task: string;
   taskBy: string | null;
   taskAt: string | null;
+  /** Only for whoever runs the room: null = they can give this person a new sign-in code; otherwise why not. */
+  codeBlock?: string | null;
 }
 
 export interface Channel {

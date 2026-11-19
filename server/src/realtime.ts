@@ -69,7 +69,74 @@ export function presenceFor(incidentId: string): PresenceEntry[] {
 }
 
 export function broadcastPresence(incidentId: string) {
-  io.to(`incident:${incidentId}`).emit('presence', { incidentId, users: presenceFor(incidentId) });
+  const users = presenceFor(incidentId);
+  io.to(`incident:${incidentId}`).emit('presence', { incidentId, users });
+  trackPresence(incidentId, users);
+}
+
+// ---------- comings and goings on the timeline ----------
+// Who came into or left the room and its voice rooms, so the record shows who was there when.
+// A change is written only once it has lasted PRESENCE_GRACE_MS, so a page reload or a blip of a
+// few seconds isn't logged; a real drop is, at the time it happened. The last written state is kept
+// on incident_members so a server restart doesn't log everyone again.
+
+const PRESENCE_GRACE_MS = 20_000;
+const pendingPresence = new Map<string, { since: string; timer: NodeJS.Timeout }>();
+
+interface Seen {
+  present: number;
+  present_voice: string | null;
+}
+
+function trackPresence(incidentId: string, users = presenceFor(incidentId)) {
+  const live = new Map(users.map((p) => [p.userId, p.voiceRoomId ?? null]));
+  const stored = new Map(
+    q
+      .all<Seen & { user_id: string }>('SELECT user_id, present, present_voice FROM incident_members WHERE incident_id = ? AND present = 1', incidentId)
+      .map((r) => [r.user_id, r.present_voice ?? null]),
+  );
+  for (const userId of new Set([...live.keys(), ...stored.keys()])) {
+    const same = live.has(userId) === stored.has(userId) && (live.get(userId) ?? null) === (stored.get(userId) ?? null);
+    const key = `${incidentId}:${userId}`;
+    if (same || pendingPresence.has(key)) continue;
+    const since = new Date().toISOString();
+    pendingPresence.set(key, { since, timer: setTimeout(() => void commitPresence(incidentId, userId), PRESENCE_GRACE_MS).unref() });
+  }
+}
+
+async function commitPresence(incidentId: string, userId: string) {
+  const key = `${incidentId}:${userId}`;
+  const pending = pendingPresence.get(key);
+  pendingPresence.delete(key);
+  if (!pending) return;
+  try {
+    const row = q.get<Seen>('SELECT present, present_voice FROM incident_members WHERE incident_id = ? AND user_id = ?', incidentId, userId);
+    if (!row) return;
+    const p = presenceFor(incidentId).find((x) => x.userId === userId);
+    const was = { in: Boolean(row.present), voice: row.present ? row.present_voice ?? null : null };
+    const is = { in: Boolean(p), voice: p?.voiceRoomId ?? null };
+    if (was.in === is.in && was.voice === is.voice) return;
+    q.run('UPDATE incident_members SET present = ?, present_voice = ? WHERE incident_id = ? AND user_id = ?', is.in ? 1 : 0, is.voice, incidentId, userId);
+    const name = getUser(userId)?.display_name ?? 'Someone';
+    const room = (id: string | null) => (id && q.get<{ name: string }>('SELECT name FROM voice_rooms WHERE id = ?', id)?.name) || 'a voice room';
+    let text: string;
+    if (!was.in) text = is.voice ? `${name} came into the room and joined ${room(is.voice)}` : `${name} came into the room`;
+    else if (!is.in) text = was.voice ? `${name} left the room (was in ${room(was.voice)})` : `${name} left the room`;
+    else if (!was.voice) text = `${name} joined ${room(is.voice)}`;
+    else if (!is.voice) text = `${name} left ${room(was.voice)}`;
+    else text = `${name} moved from ${room(was.voice)} to ${room(is.voice)}`;
+    const { addTimeline } = await import('./api.js');
+    addTimeline(incidentId, userId, 'presence', text, null, pending.since);
+  } catch (err) {
+    console.error('[presence]', err instanceof Error ? err.message : err);
+  }
+}
+
+/** After a restart: people marked present who don't reconnect are logged as having left. */
+function recheckPresenceAfterStart() {
+  setTimeout(() => {
+    for (const { incident_id } of q.all<{ incident_id: string }>('SELECT DISTINCT incident_id FROM incident_members WHERE present = 1')) trackPresence(incident_id);
+  }, 30_000).unref();
 }
 
 /** Count of users currently in each incident (for the dashboard). */
@@ -86,6 +153,7 @@ export function activeCounts(): Record<string, { present: number; inVoice: numbe
 
 export function initRealtime(server: HttpServer) {
   io = new Server(server, { path: '/socket.io', serveClient: false });
+  recheckPresenceAfterStart();
 
   io.use(async (socket, next) => {
     const user = await userFromCookieHeader(socket.handshake.headers.cookie);

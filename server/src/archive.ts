@@ -64,7 +64,13 @@ const SPECS: TableSpec[] = [
   { table: 'message_mentions', where: (c) => ({ sql: `message_id IN (${list(c.ids.messages)})`, params: c.ids.messages }), cols: { message_id: 'ref', user_id: 'user' } },
   { table: 'timeline', where: (c) => ({ sql: 'incident_id = ?', params: [c.inc] }), cols: { id: 'id', incident_id: 'incident', user_id: 'user' }, text: ['ref'] },
   { table: 'incident_roles', where: (c) => ({ sql: 'incident_id = ?', params: [c.inc] }), cols: { incident_id: 'incident', user_id: 'user' } },
-  { table: 'incident_members', where: (c) => ({ sql: 'incident_id = ?', params: [c.inc] }), cols: { incident_id: 'incident', user_id: 'user', task_by: 'user' } },
+  {
+    table: 'incident_members',
+    where: (c) => ({ sql: 'incident_id = ?', params: [c.inc] }),
+    cols: { incident_id: 'incident', user_id: 'user', task_by: 'user' },
+    // Nobody is connected to the imported room yet.
+    fix: (row) => Object.assign(row, { present: 0, present_voice: null }),
+  },
   { table: 'incident_room_admins', where: (c) => ({ sql: 'incident_id = ?', params: [c.inc] }), cols: { incident_id: 'incident', user_id: 'user', granted_by: 'user' } },
   { table: 'assignments', where: (c) => ({ sql: 'incident_id = ?', params: [c.inc] }), cols: { incident_id: 'incident', target_id: 'ref', user_id: 'user', assigned_by: 'user' } },
   { table: 'sheets', where: (c) => ({ sql: 'incident_id = ?', params: [c.inc] }), cols: { id: 'id', incident_id: 'incident', created_by: 'user' } },

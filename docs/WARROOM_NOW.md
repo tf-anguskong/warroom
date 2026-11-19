@@ -150,9 +150,13 @@ Sessions last 12 hours by default (Admin → Settings → General). To get back 
 
 | Who | With email | Without email |
 |---|---|---|
-| **Responder** | Sign-in page → *Email me a sign-in code* | An admin opens **Admin → People → Sign-in code** for them (15 minutes, works once). They choose *I already have a code from an admin* on the sign-in page. |
-| **Guest** | Open the original invite link again → *Email me a code* | The IC or a room admin clicks **Sign-in code** next to the guest in the room panel; the guest opens the original link and enters it. |
+| **Responder** | Sign-in page → *Email me a sign-in code* | The IC or a room admin opens **⋯ → New sign-in code** on them in the room's People list (or an admin uses **Admin → People → Sign-in code**). They choose *I already have a code* on the sign-in page. |
+| **Guest** | Open the original invite link again → *Email me a code* | The IC or a room admin opens **⋯ → New sign-in code** on them in People (or **Sign-in code** in Guests). That gives a **new link** and a code; the old link stops working. |
 | **You (admin)** | Sign-in page → email code | `bash warroom-now.sh link` on the server prints a one-time admin link. |
+
+Codes from the room work once, for 30 minutes, and replace any earlier code. They're for people who dropped off (network trouble, a closed laptop, a new device) and can't get back in alone. Only an app admin can make one for an admin or for the Incident Commander, so a room admin can't take over those accounts. Every code made is on the timeline.
+
+The timeline also records **comings and goings**: who came into the room, joined, moved between or left voice rooms, and left. A change is written once it has lasted 20 seconds, so a page reload isn't logged, but a real drop is (at the time it happened). Use the timeline's **Comings & goings** filter to see them; they're in the export too.
 
 ---
 
