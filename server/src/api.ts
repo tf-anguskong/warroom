@@ -22,6 +22,7 @@ import { mentionedUserIds, mentionsToText, resolveMentions } from './mentions.js
 import { canSee, guestsOf } from './guests.js';
 import { notesFor, notesForExport } from './notes.js';
 import { attachmentsOf, attachToMessage, filesForExport, pendingUploads } from './files.js';
+import { shiftsForExport, shiftsOf } from './shifts.js';
 import { linkedProviders, providerLabel, ssoProviders } from './sso.js';
 
 interface IncidentRow {
@@ -568,6 +569,8 @@ api.get(
       channels,
       sheets,
       notes: notesFor(viewer, inc.id),
+      // Guests don't see the team's schedule.
+      shifts: viewer.is_guest ? [] : shiftsOf(inc.id),
     };
   }),
 );
@@ -1344,6 +1347,8 @@ api.get(
     );
     const noteLines = notesForExport(inc.id);
     if (noteLines.length) lines.push('', ...noteLines);
+    const shiftLines = shiftsForExport(inc.id);
+    if (shiftLines.length) lines.push('', ...shiftLines);
     const fileLines = filesForExport(inc.id);
     if (fileLines.length) lines.push('', ...fileLines);
     if (pins.length) {

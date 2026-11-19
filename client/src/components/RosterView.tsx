@@ -7,6 +7,7 @@ import type { Assignment, IncidentState, Presence } from '../types';
 import { AssignDialog, targetLabel, type AssignTarget } from './AssignDialog';
 import { Avatar, Icons } from './ui';
 import { GuestTag } from './Guests';
+import { shiftStatus } from './ScheduleView';
 
 const STALE_MIN = 30;
 
@@ -216,6 +217,10 @@ export function RosterView({ state, presence, onOpenChannel }: { state: Incident
                           <div className="muted small">
                             {[...roles, state.roomAdmins.includes(id) ? 'Room admin' : null].filter(Boolean).join(' · ') || 'Responder'}
                           </div>
+                          {(() => {
+                            const sh = shiftStatus(state.shifts ?? [], id, new Date(now).toISOString());
+                            return sh ? <div className={`small ${sh.on ? 'ok-text' : 'muted'}`}>{Icons.calendar} {sh.text}</div> : null;
+                          })()}
                         </span>
                       </span>
                     </td>

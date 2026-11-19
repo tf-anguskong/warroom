@@ -108,6 +108,19 @@ export interface IncidentState {
   channels: Channel[];
   sheets: { id: string; name: string }[];
   notes: { id: string; name: string }[];
+  shifts: Shift[];
+}
+
+/** A scheduled shift in a war room (times are ISO, UTC). */
+export interface Shift {
+  id: string;
+  userId: string;
+  userName: string;
+  startsAt: string;
+  endsAt: string;
+  note: string;
+  createdBy: string | null;
+  createdByName: string | null;
 }
 
 export interface Message {
@@ -138,6 +151,8 @@ export interface FileItem {
   size: number;
   sha256: string;
   image: boolean;
+  /** What the in-app viewer can show; null means download only. */
+  preview: 'image' | 'pdf' | 'docx' | 'text' | null;
   type: string;
   description: string;
   uploadedBy: string | null;
@@ -204,6 +219,7 @@ export type View =
   | { kind: 'sheet'; id: string }
   | { kind: 'note'; id: string }
   | { kind: 'files' }
+  | { kind: 'schedule' }
   | { kind: 'timeline' }
   | { kind: 'investigate' }
   | { kind: 'roster' };

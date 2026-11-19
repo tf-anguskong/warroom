@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { createReadStream, createWriteStream, mkdirSync, renameSync, unlinkSync } from 'node:fs';
+import { closeSync, createReadStream, createWriteStream, mkdirSync, openSync, readSync, renameSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS files (
 CREATE INDEX IF NOT EXISTS idx_files_incident ON files(incident_id, uploaded_at);
 CREATE INDEX IF NOT EXISTS idx_files_message ON files(message_id);
 `);
+if (!q.all<{ name: string }>('PRAGMA table_info(files)').some((c) => c.name === 'preview')) db.exec('ALTER TABLE files ADD COLUMN preview TEXT');
 
 const dir = join(config.dataDir, 'files');
 mkdirSync(dir, { recursive: true });
@@ -55,6 +56,7 @@ export interface FileRow {
   name: string;
   declared_type: string;
   image_type: string | null;
+  preview: Preview | null;
   size: number;
   sha256: string;
   description: string;
@@ -92,6 +94,64 @@ function sniffImage(head: Buffer): string | null {
   return null;
 }
 
+export type Preview = 'image' | 'pdf' | 'docx' | 'text' | 'none';
+const HEAD_BYTES = 8192;
+/** Text previews show at most this much; the rest is a download. */
+const TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
+
+/**
+ * Can the in-app viewer show this file? Decided from the bytes (and, for .docx, the zip signature
+ * plus the name), never from the claimed type alone. 'text' means no NUL bytes and almost all
+ * printable UTF-8 in the first 8 KB, whatever the extension (logs come with odd names).
+ */
+function previewKind(name: string, head: Buffer, imageType: string | null): Preview {
+  if (imageType) return 'image';
+  if (head.subarray(0, 5).toString('latin1') === '%PDF-') return 'pdf';
+  if (head.length >= 4 && head.readUInt32BE(0) === 0x504b0304 && /\.docx$/i.test(name)) return 'docx';
+  if (!head.length || head.includes(0)) return 'none';
+  // Ignore a multi-byte character cut off at the end of the sample.
+  let sample = head;
+  for (let i = 1; i <= 3 && i <= sample.length; i++) {
+    const b = sample[sample.length - i];
+    if ((b & 0xc0) === 0xc0) {
+      sample = sample.subarray(0, sample.length - i);
+      break;
+    }
+    if ((b & 0x80) === 0) break;
+  }
+  let text: string;
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(sample);
+  } catch {
+    return 'none';
+  }
+  const control = [...text].filter((c) => {
+    const n = c.charCodeAt(0);
+    return n < 32 && n !== 9 && n !== 10 && n !== 13 && n !== 12;
+  }).length;
+  return control / Math.max(1, text.length) < 0.01 ? 'text' : 'none';
+}
+
+function readHead(path: string) {
+  const fd = openSync(path, 'r');
+  try {
+    const buf = Buffer.alloc(HEAD_BYTES);
+    const n = readSync(fd, buf, 0, HEAD_BYTES, 0);
+    return buf.subarray(0, n);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/** Files uploaded before previews existed: work out their preview kind once. */
+for (const f of q.all<{ id: string; name: string; image_type: string | null }>('SELECT id, name, image_type FROM files WHERE preview IS NULL AND deleted_at IS NULL')) {
+  try {
+    q.run('UPDATE files SET preview = ? WHERE id = ?', previewKind(f.name, readHead(join(dir, f.id)), f.image_type), f.id);
+  } catch {
+    q.run("UPDATE files SET preview = 'none' WHERE id = ?", f.id);
+  }
+}
+
 /** A file name safe to show and to put in a download header. */
 function cleanName(raw: string) {
   const base = raw.replace(/\\/g, '/').split('/').pop() ?? '';
@@ -123,6 +183,7 @@ export function fileView(f: FileRow) {
     size: f.size,
     sha256: f.sha256,
     image: Boolean(f.image_type),
+    preview: f.preview && f.preview !== 'none' ? f.preview : null,
     type: f.image_type ?? f.declared_type,
     description: f.description,
     uploadedBy: f.uploaded_by,
@@ -218,7 +279,7 @@ filesRouter.post(
       transform(chunk: Buffer, _enc, cb) {
         size += chunk.length;
         if (size > max) return cb(new HttpError(413, `That file is too large (the limit is ${config.files.maxMb} MB).`));
-        if (head.length < 16) head = Buffer.concat([head, chunk.subarray(0, 16 - head.length)]);
+        if (head.length < HEAD_BYTES) head = Buffer.concat([head, chunk.subarray(0, HEAD_BYTES - head.length)]);
         hash.update(chunk);
         cb(null, chunk);
       },
@@ -243,9 +304,9 @@ filesRouter.post(
     const imageType = sniffImage(head);
     const description = source === 'evidence' ? str(req.query.description, 500) : '';
     q.run(
-      `INSERT INTO files (id, incident_id, channel_id, note_id, source, name, declared_type, image_type, size, sha256, description, uploaded_by, uploaded_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id, inc.id, channelId, noteId, source, name, declaredType, imageType, size, sha256, description, user.id, now(),
+      `INSERT INTO files (id, incident_id, channel_id, note_id, source, name, declared_type, image_type, preview, size, sha256, description, uploaded_by, uploaded_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, inc.id, channelId, noteId, source, name, declaredType, imageType, previewKind(name, head, imageType), size, sha256, description, user.id, now(),
     );
     if (source === 'evidence') {
       addTimeline(inc.id, user.id, 'evidence', `Evidence added: ${name} (${human(size)}, SHA-256 ${sha256})${description ? ` — ${description}` : ''}`, { fileId: id });
@@ -269,17 +330,20 @@ filesRouter.get(
     const f = getFile(req.params.id);
     if (!f || !canOpen(req.user!, f)) throw new HttpError(404, 'file not found');
     if (f.deleted_at) throw new HttpError(410, 'this file was deleted');
-    const inline = Boolean(f.image_type) && req.query.download === undefined;
+    const inline = Boolean(f.image_type) && req.query.download === undefined && req.query.preview === undefined;
+    // The viewer asks for ?preview: text files are cut to the first 2 MB.
+    const cut = req.query.preview !== undefined && f.preview === 'text' && f.size > TEXT_PREVIEW_BYTES;
     res.setHeader('X-Content-Type-Options', 'nosniff');
     // Even if a browser decided to render it, nothing in it may run or load.
     res.setHeader('Content-Security-Policy', "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox");
     res.setHeader('Cache-Control', 'private, max-age=3600');
     res.setHeader('Content-Type', inline ? f.image_type! : 'application/octet-stream');
-    res.setHeader('Content-Length', String(f.size));
+    res.setHeader('Content-Length', String(cut ? TEXT_PREVIEW_BYTES : f.size));
+    if (cut) res.setHeader('X-Preview-Truncated', '1');
     const ascii = f.name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_');
     res.setHeader('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(f.name)}`);
     res.setHeader('X-File-SHA256', f.sha256);
-    createReadStream(blobPath(f.id))
+    createReadStream(blobPath(f.id), cut ? { end: TEXT_PREVIEW_BYTES - 1 } : undefined)
       .on('error', () => {
         if (!res.headersSent) res.status(404).json({ error: 'file missing on the server' });
         else res.destroy();

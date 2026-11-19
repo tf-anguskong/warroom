@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, ApiError } from '../lib/api';
 import { useApp } from '../lib/app';
 import { getSocket } from '../lib/socket';
@@ -9,29 +9,14 @@ import { Icons, Modal } from './ui';
 
 const shortHash = (h: string) => `${h.slice(0, 12)}…`;
 
-/** Full-size image viewer. */
-export function Lightbox({ file, onClose }: { file: FileItem; onClose: () => void }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+const FileViewer = lazy(() => import('./FileViewer'));
+
+/** Opens the in-app viewer (loaded on first use, so PDF and Word support don't slow the app down). */
+export function Viewer({ file, onClose }: { file: FileItem; onClose: () => void }) {
   return (
-    <div className="lightbox" role="dialog" aria-label={file.name} onClick={onClose}>
-      <img src={file.url} alt={file.name} onClick={(e) => e.stopPropagation()} />
-      <div className="lightbox-bar" onClick={(e) => e.stopPropagation()}>
-        <span>{file.name}</span>
-        <span className="muted mono small">
-          {humanSize(file.size)} · SHA-256 {shortHash(file.sha256)}
-        </span>
-        <a className="btn ghost sm" href={`${file.url}?download`}>
-          {Icons.download} Download
-        </a>
-        <button className="btn ghost sm" onClick={onClose}>
-          Close
-        </button>
-      </div>
-    </div>
+    <Suspense fallback={<div className="viewer"><div className="viewer-msg">Opening…</div></div>}>
+      <FileViewer file={file} onClose={onClose} />
+    </Suspense>
   );
 }
 
@@ -53,19 +38,30 @@ export function Attachments({ files }: { files: FileItem[] }) {
             <img src={f.url} alt={f.name} loading="lazy" />
           </button>
         ) : (
-          <a key={f.id} className="file-card" href={`${f.url}?download`} title={`SHA-256 ${f.sha256}`}>
+          <div key={f.id} className="file-card" title={`SHA-256 ${f.sha256}`}>
             <span className="file-icon">{Icons.paperclip}</span>
-            <span className="grow">
-              <span className="file-name">{f.name}</span>
-              <span className="muted small mono">
-                {humanSize(f.size)} · {shortHash(f.sha256)}
+            {f.preview ? (
+              <button className="grow file-open" onClick={() => setOpen(f)} title="View in War Room">
+                <span className="file-name">{f.name}</span>
+                <span className="muted small mono">
+                  {humanSize(f.size)} · {shortHash(f.sha256)} · <span className="accent-text">View</span>
+                </span>
+              </button>
+            ) : (
+              <span className="grow">
+                <span className="file-name">{f.name}</span>
+                <span className="muted small mono">
+                  {humanSize(f.size)} · {shortHash(f.sha256)}
+                </span>
               </span>
-            </span>
-            {Icons.download}
-          </a>
+            )}
+            <a className="icon-btn sm" href={`${f.url}?download`} title="Download" aria-label={`Download ${f.name}`}>
+              {Icons.download}
+            </a>
+          </div>
         ),
       )}
-      {open && <Lightbox file={open} onClose={() => setOpen(null)} />}
+      {open && <Viewer file={open} onClose={() => setOpen(null)} />}
     </div>
   );
 }
@@ -276,8 +272,12 @@ export function FilesView({ state, onOpenChannel, onOpenNote }: { state: Inciden
                     <td>
                       {f.deleted ? (
                         <span className="muted">{f.name}</span>
+                      ) : f.preview ? (
+                        <button className="link-btn file-name" onClick={() => setOpen(f)} title="View in War Room">
+                          {f.name}
+                        </button>
                       ) : (
-                        <a href={`${f.url}?download`} className="file-name">
+                        <a href={`${f.url}?download`} className="file-name" title="Download">
                           {f.name}
                         </a>
                       )}
@@ -294,6 +294,11 @@ export function FilesView({ state, onOpenChannel, onOpenNote }: { state: Inciden
                     <td className="small">{f.uploadedByName ?? '—'}</td>
                     <td className="small">{where(f)}</td>
                     <td className="row-actions">
+                      {!f.deleted && (
+                        <a className="icon-btn sm" href={`${f.url}?download`} title="Download" aria-label={`Download ${f.name}`}>
+                          {Icons.download}
+                        </a>
+                      )}
                       {!f.deleted && (f.uploadedBy === me.id || state.canControl) && (
                         <button className="icon-btn sm" title="Delete file" aria-label={`Delete ${f.name}`} onClick={() => setConfirmDelete(f)}>
                           {Icons.trash}
@@ -309,7 +314,7 @@ export function FilesView({ state, onOpenChannel, onOpenNote }: { state: Inciden
       </div>
 
       {dragging && <div className="drop-overlay">Drop to add as evidence</div>}
-      {open && <Lightbox file={open} onClose={() => setOpen(null)} />}
+      {open && <Viewer file={open} onClose={() => setOpen(null)} />}
       {confirmDelete && (
         <Modal
           title={`Delete ${confirmDelete.name}?`}

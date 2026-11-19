@@ -271,6 +271,17 @@ export function Sidebar({ state, presence, view, unread, mentions, onView, onJoi
               <span className="nav-label">Who’s doing what</span>
             </button>
           </div>
+          <div className={`nav-item ${view.kind === 'schedule' ? 'active' : ''}`}>
+            <button className="nav-main" onClick={() => onView({ kind: 'schedule' })}>
+              <span className="nav-icon">{Icons.calendar}</span>
+              <span className="nav-label">Schedule</span>
+              {(() => {
+                const t = new Date().toISOString();
+                const n = state.shifts.filter((s) => s.startsAt <= t && s.endsAt > t).length;
+                return n > 0 ? <span className="count" title={`${n} on shift now`}>{n}</span> : null;
+              })()}
+            </button>
+          </div>
           <div className={`nav-item ${view.kind === 'files' ? 'active' : ''}`}>
             <button className="nav-main" onClick={() => onView({ kind: 'files' })}>
               <span className="nav-icon">{Icons.folder}</span>

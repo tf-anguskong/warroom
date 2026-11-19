@@ -17,6 +17,7 @@ import { initRealtime } from './realtime.js';
 import { applySettings, settingsRouter } from './settings.js';
 import { notesRouter } from './notes.js';
 import { filesRouter } from './files.js';
+import { shiftsRouter } from './shifts.js';
 import { announceSetupIfNeeded, setupRouter } from './setup.js';
 
 // Saved settings (Admin → Settings) go on top of the environment and defaults before anything runs.
@@ -49,6 +50,7 @@ app.use('/api', requireAuth, guestsRouter);
 app.use('/api', requireAuth, settingsRouter);
 app.use('/api', requireAuth, notesRouter);
 app.use('/api', requireAuth, filesRouter);
+app.use('/api', requireAuth, shiftsRouter);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const clientDist = resolve(process.env.CLIENT_DIST ?? join(here, '../../client/dist'));

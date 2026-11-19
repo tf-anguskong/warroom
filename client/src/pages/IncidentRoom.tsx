@@ -13,6 +13,7 @@ import { ChatView } from '../components/ChatView';
 import { SheetView } from '../components/SheetView';
 import { NoteView } from '../components/NoteView';
 import { FilesView } from '../components/Files';
+import { ScheduleView } from '../components/ScheduleView';
 import { TimelineView } from '../components/TimelineView';
 import { InvestigateView } from '../components/InvestigateView';
 import { RosterView } from '../components/RosterView';
@@ -34,6 +35,7 @@ function parseView(s: string | null): View | null {
   if (s === 'investigate') return { kind: 'investigate' };
   if (s === 'roster') return { kind: 'roster' };
   if (s === 'files') return { kind: 'files' };
+  if (s === 'schedule') return { kind: 'schedule' };
   const [kind, id] = s.split(':');
   if ((kind === 'channel' || kind === 'sheet' || kind === 'note') && id) return { kind, id };
   return null;
@@ -69,7 +71,7 @@ function Room({ incidentId }: { incidentId: string }) {
     if (requested?.kind === 'sheet' && state.sheets.some((s) => s.id === requested.id)) return requested;
     if (requested?.kind === 'note' && state.notes.some((n) => n.id === requested.id)) return requested;
     if (requested?.kind === 'timeline' || requested?.kind === 'investigate' || requested?.kind === 'roster') return requested;
-    if (requested?.kind === 'files' && !me.isGuest) return requested;
+    if ((requested?.kind === 'files' || requested?.kind === 'schedule') && !me.isGuest) return requested;
     return state.channels[0] ? { kind: 'channel', id: state.channels[0].id } : { kind: 'timeline' };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, params]);
@@ -178,6 +180,21 @@ function Room({ incidentId }: { incidentId: string }) {
     const onTaskSet = (e: { incidentId: string; task: string; by: string }) =>
       e.incidentId === incidentId &&
       toast({ text: e.task ? `${e.by} set your task: ${e.task}` : `${e.by} cleared your task`, action: { label: 'View', run: () => setViewRef.current({ kind: 'roster' }) } }, 10000);
+    const onShifts = (e: { incidentId: string; shifts: IncidentState['shifts'] }) =>
+      e.incidentId === incidentId && setState((st) => (st ? { ...st, shifts: e.shifts } : st));
+    const toSchedule = { label: 'Schedule', run: () => setViewRef.current({ kind: 'schedule' }) };
+    const hhmm = (iso: string) => `${iso.slice(11, 16)}Z`;
+    const onShiftSoon = (e: { incidentId: string; shift: { startsAt: string; endsAt: string; note: string } }) =>
+      e.incidentId === incidentId &&
+      toast({ text: `Your shift starts at ${hhmm(e.shift.startsAt)} (until ${hhmm(e.shift.endsAt)})${e.shift.note ? ` · ${e.shift.note}` : ''}`, tone: 'warn', action: toSchedule }, 30000);
+    const onShiftStarted = (e: { incidentId: string; shift: { endsAt: string } }) =>
+      e.incidentId === incidentId && toast({ text: `You’re on shift now, until ${hhmm(e.shift.endsAt)}.`, action: toSchedule }, 15000);
+    const onShiftEnded = (e: { incidentId: string; onNow: string[] }) =>
+      e.incidentId === incidentId &&
+      toast(
+        { text: `Your shift has ended. ${e.onNow.length ? `Hand off to ${e.onNow.join(', ')}` : 'Nobody is scheduled after you; check with the Incident Commander'} before you sign off.`, tone: 'warn', action: toSchedule },
+        60000,
+      );
     const onDisconnect = () => setConnected(false);
     if (s.connected) join();
     s.on('connect', join);
@@ -193,6 +210,10 @@ function Room({ incidentId }: { incidentId: string }) {
     s.on('assigned', onAssigned);
     s.on('task:set', onTaskSet);
     s.on('command:changed', onCommand);
+    s.on('shifts:update', onShifts);
+    s.on('shift:soon', onShiftSoon);
+    s.on('shift:started', onShiftStarted);
+    s.on('shift:ended', onShiftEnded);
     return () => {
       s.emit('incident:leave');
       s.off('connect', join);
@@ -208,6 +229,10 @@ function Room({ incidentId }: { incidentId: string }) {
       s.off('assigned', onAssigned);
       s.off('task:set', onTaskSet);
       s.off('command:changed', onCommand);
+      s.off('shifts:update', onShifts);
+      s.off('shift:soon', onShiftSoon);
+      s.off('shift:started', onShiftStarted);
+      s.off('shift:ended', onShiftEnded);
     };
   }, [incidentId, load, me.id, toast]);
 
@@ -272,6 +297,7 @@ function Room({ incidentId }: { incidentId: string }) {
           {view.kind === 'sheet' && <SheetView key={view.id} sheetId={view.id} state={state} presence={presence} />}
           {view.kind === 'note' && <NoteView key={view.id} noteId={view.id} state={state} presence={presence} />}
           {view.kind === 'timeline' && <TimelineView state={state} onOpenChannel={(id) => setView({ kind: 'channel', id })} />}
+          {view.kind === 'schedule' && <ScheduleView state={state} presence={presence} />}
           {view.kind === 'files' && <FilesView state={state} onOpenChannel={(id) => setView({ kind: 'channel', id })} onOpenNote={(id) => setView({ kind: 'note', id })} />}
           {view.kind === 'roster' && <RosterView state={state} presence={presence} onOpenChannel={(id) => setView({ kind: 'channel', id })} />}
           {view.kind === 'investigate' && (

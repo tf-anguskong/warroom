@@ -33,6 +33,7 @@ server/src/
   api.ts          incidents, channels, messages, voice, roles, assignments, sheets, export, admin
   notes.ts        Markdown notes; saves carry the version they started from (409 on conflict)
   files.ts        uploads to DATA_DIR/files with SHA-256; downloads; Files view API
+  shifts.ts       shift schedule; a 30 s ticker sends reminders and start/end notices (flags on each row so each fires once)
   guests.ts       guest invites, scopes, deny-by-default route allowlist, email codes, sweeper
   mail.ts         nodemailer transport (TLS required), dev outbox
   realtime.ts     Socket.IO: presence, incident rooms, guest-aware broadcast
@@ -86,6 +87,7 @@ docs/CLAUDE_DESIGN_PROMPT.md   design brief for Claude Design; update it when sc
 - Uploads are raw bytes (`application/octet-stream`, real type in `X-File-Type`) so `express.json` never parses them; they stream to disk while hashing and stop at the size limit.
 - Only images recognised by magic bytes are served inline; everything else is `application/octet-stream` + `attachment`, always with `nosniff` and a sandbox CSP. Never serve uploaded content as HTML/SVG.
 - Notes only display images from `/api/files/<id>`; external images are not loaded.
+- The viewer (`components/FileViewer.tsx`, lazy-loaded) renders from raw bytes fetched with `?download`/`?preview`: pdf.js with `isEvalSupported: false`, mammoth + DOMPurify for .docx, plain text for the rest. Never hand a file to the browser to render natively, and never inject unsanitised HTML from a file.
 
 **Client.**
 - React 18 + Vite, plain CSS with tokens (no UI framework). Make controls the viewer can't use visibly read-only, with a short reason, instead of hiding them.
