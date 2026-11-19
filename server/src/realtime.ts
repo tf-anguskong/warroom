@@ -227,10 +227,13 @@ export function initRealtime(server: HttpServer) {
   bus.on('user:changed', (userId: string) => io.to(`user:${userId}`).emit('me:changed'));
   bus.on('groups:changed', () => io.emit('me:changed'));
 
-  bus.on('user:deactivated', (userId: string) => {
+  const endSessions = (userId: string) => {
     io.to(`user:${userId}`).emit('session:revoked');
     io.in(`user:${userId}`).disconnectSockets(true);
-  });
+  };
+  bus.on('user:deactivated', endSessions);
+  // SSO linked an existing account: sockets opened before then belong to earlier sessions.
+  bus.on('user:sessions-ended', endSessions);
 }
 
 /** Events guests may receive; everything else sent to an incident goes to organization members only. */

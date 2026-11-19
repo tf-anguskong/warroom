@@ -176,6 +176,8 @@ const userCols = new Set((db.prepare('PRAGMA table_info(users)').all() as { name
 if (!userCols.has('idp_admin')) db.exec('ALTER TABLE users ADD COLUMN idp_admin INTEGER NOT NULL DEFAULT 0');
 if (!userCols.has('last_login_at')) db.exec('ALTER TABLE users ADD COLUMN last_login_at TEXT');
 if (!userCols.has('last_login_provider')) db.exec('ALTER TABLE users ADD COLUMN last_login_provider TEXT');
+// Unix seconds: sessions issued before this are no longer accepted (set when SSO first links an existing account).
+if (!userCols.has('sessions_valid_after')) db.exec('ALTER TABLE users ADD COLUMN sessions_valid_after INTEGER');
 
 // War room control: people besides the Incident Commander who can run the room.
 db.exec(`

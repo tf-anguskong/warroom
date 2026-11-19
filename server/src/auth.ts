@@ -80,10 +80,12 @@ export async function userFromCookieHeader(header: string | undefined): Promise<
 }
 
 async function userFromToken(token: string | undefined) {
-  const payload = await verify<{ sub: string }>(token);
+  const payload = await verify<{ sub: string; iat?: number }>(token);
   if (!payload?.sub) return null;
   const user = getUser(payload.sub);
   if (!user || !user.active || user.deleted) return null;
+  // Sessions from before the account's SSO identity was linked belong to whoever used it before then.
+  if (user.sessions_valid_after && (payload.iat ?? 0) < user.sessions_valid_after) return null;
   if (user.is_guest && !guestSessionValid(user)) return null;
   return user;
 }

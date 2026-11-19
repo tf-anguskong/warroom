@@ -17,6 +17,8 @@ export interface UserRow {
   idp_admin: number;
   last_login_at: string | null;
   last_login_provider: string | null;
+  /** Unix seconds; sessions issued earlier are rejected. */
+  sessions_valid_after: number | null;
   is_guest: number;
   guest_incident_id: string | null;
   guest_expires_at: string | null;

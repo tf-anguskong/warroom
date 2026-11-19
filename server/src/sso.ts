@@ -1,6 +1,6 @@
 import { config, entraEnabled, oidcEnabled } from './config.js';
 import { now, q } from './db.js';
-import { createUser, findUserByLogin, updateUser, type UserRow } from './users.js';
+import { bus, createUser, findUserByLogin, logAdminAction, updateUser, type UserRow } from './users.js';
 
 export type ProviderId = 'okta' | 'entra';
 
@@ -73,6 +73,7 @@ export function resolveSsoUser(provider: SsoProvider, id: SsoIdentity): UserRow 
     (id.login ? findUserByLogin(id.login) : undefined) ||
     (id.email && id.emailTrusted ? findUserByLogin(id.email) : undefined);
 
+  const existed = Boolean(user);
   if (!user) {
     if (!provider.jitProvisioning) return 'not_provisioned';
     user = createUser({
@@ -93,6 +94,13 @@ export function resolveSsoUser(provider: SsoProvider, id: SsoIdentity): UserRow 
       user.id,
       now(),
     );
+    if (existed) {
+      // The account was made before its owner first signed in (by SCIM, an invite, an admin or email
+      // sign-in). Whoever used it until now must not carry on as the person who just proved who they are.
+      q.run('UPDATE users SET sessions_valid_after = ? WHERE id = ?', Math.floor(Date.now() / 1000), user.id);
+      logAdminAction(null, user.id, 'sso_linked', `${providerLabel(provider.id)} sign-in linked to an existing account; its earlier sessions were ended`);
+      bus.emit('user:sessions-ended', user.id);
+    }
   }
 
   const updates: Partial<Record<keyof UserRow, unknown>> = { last_login_provider: provider.id };
