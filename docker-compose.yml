@@ -1,0 +1,53 @@
+# Production stack: War Room app + LiveKit media server + Caddy (automatic HTTPS).
+# Browsers require HTTPS/WSS for microphone and screen-share access, so run this behind real DNS names.
+#   1. Point two DNS names at this host and put them below (or export APP_DOMAIN / LIVEKIT_DOMAIN).
+#   2. Open ports 80, 443 (TCP), 7881 (TCP) and 50000-50100 (UDP).
+#   3. docker compose up -d --build
+#   4. docker compose logs app  → open the one-time setup link it prints, then configure
+#      sign-in, email and everything else in Admin → Settings. No .env file is needed.
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Starting values only; Admin → Settings overrides them.
+      PUBLIC_URL: https://${APP_DOMAIN:-warroom.example.com}
+      LIVEKIT_URL: wss://${LIVEKIT_DOMAIN:-livekit.example.com}
+      LIVEKIT_API_URL: http://livekit:7880
+      # War Room makes the LiveKit key pair and writes it here for the LiveKit container.
+      LIVEKIT_KEY_FILE: /keys/livekit-keys.yaml
+    volumes:
+      - warroom-data:/data
+      - livekit-keys:/keys
+
+  livekit:
+    image: livekit/livekit-server:v1.13
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    depends_on:
+      app:
+        condition: service_healthy
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+      - livekit-keys:/keys:ro
+    ports:
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:-warroom.example.com}
+      LIVEKIT_DOMAIN: ${LIVEKIT_DOMAIN:-livekit.example.com}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+
+volumes:
+  warroom-data:
+  livekit-keys:
+  caddy-data:

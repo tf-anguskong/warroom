@@ -1,0 +1,36 @@
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { AppProvider } from './lib/app';
+import { Login } from './pages/Login';
+import { Join } from './pages/Join';
+import { Setup } from './pages/Setup';
+import { Dashboard } from './pages/Dashboard';
+import { IncidentRoom } from './pages/IncidentRoom';
+import { Admin } from './pages/Admin';
+import './styles.css';
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/join/:token" element={<Join />} />
+        <Route path="/setup/:token" element={<Setup />} />
+        <Route
+          path="/*"
+          element={
+            <AppProvider>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/incidents/:id" element={<IncidentRoom />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </AppProvider>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
+  </StrictMode>,
+);
