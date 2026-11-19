@@ -43,7 +43,7 @@ function parseView(s: string | null): View | null {
 }
 
 function Room({ incidentId }: { incidentId: string }) {
-  const { me, toast, meta } = useApp();
+  const { me, toast, meta, userById, reloadUsers } = useApp();
   const voice = useVoice();
   const [state, setState] = useState<IncidentState | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -67,6 +67,26 @@ function Room({ incidentId }: { incidentId: string }) {
   }, [incidentId]);
 
   const requested = parseView(params.get('view'));
+  // The people list is loaded once per page. When someone new shows up in this room (a responder or
+  // guest who just joined, a new role holder, someone now online), fetch it again so they appear in
+  // role pickers, assignments, mentions and so on. Each unknown ID triggers at most one refresh.
+  const askedFor = useRef(new Set<string>());
+  useEffect(() => {
+    if (!state) return;
+    const ids = [
+      ...state.members.map((m) => m.userId),
+      ...state.roles.map((r) => r.userId),
+      ...state.roomAdmins,
+      ...state.guests.map((g) => g.id),
+      ...presence.map((p) => p.userId),
+    ];
+    const unknown = ids.filter((id) => !userById(id) && !askedFor.current.has(id));
+    if (unknown.length) {
+      unknown.forEach((id) => askedFor.current.add(id));
+      reloadUsers();
+    }
+  }, [state, presence, userById, reloadUsers]);
+
   const view: View | null = useMemo(() => {
     if (!state) return null;
     if (requested?.kind === 'channel' && state.channels.some((c) => c.id === requested.id)) return requested;

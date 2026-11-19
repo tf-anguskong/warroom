@@ -301,7 +301,11 @@ function markMember(incidentId: string, user: UserRow) {
     user.id,
     now(),
   );
-  if (r.changes) addTimeline(incidentId, user.id, 'joined', `${user.display_name} joined the war room`);
+  if (r.changes) {
+    addTimeline(incidentId, user.id, 'joined', `${user.display_name} joined the war room`);
+    // So everyone already in the room sees the new member (roles, roster, assignments) without reloading.
+    refreshIncident(incidentId);
+  }
 }
 
 // ---------- incidents ----------
