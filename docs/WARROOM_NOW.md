@@ -18,7 +18,7 @@ bash warroom-now.sh up
 | **A Linux server** with a public IP address | Any cloud VM works. 2 vCPU / 4 GB RAM is plenty for a few dozen people; add more for heavy screen sharing. |
 | **Docker** with the Compose plugin | `curl -fsSL https://get.docker.com \| sh` on most distributions. Check with `docker compose version`. |
 | **A DNS name pointing at the server** | An **A record** for e.g. `warroom.example.com` → the server's public IPv4 address (and an AAAA record if it has IPv6). Caddy uses it to get a free HTTPS certificate from Let's Encrypt automatically. **Browsers only allow microphones and screen sharing over HTTPS**, so this isn't optional. No DNS name? See [No domain?](#no-domain) below. |
-| **Open firewall ports** | TCP **80** and **443** (web and certificate), TCP **7881** and UDP **50000–50100** (voice and screen-share media). Open them in your cloud provider's security group or network firewall. The script handles the server's own firewall (`ufw` / `firewalld`) for you; see [Firewall and IP allowlist](#firewall-and-ip-allowlist). |
+| **Open firewall ports** | TCP **80** and **443** (web and certificate), TCP **7881** and UDP **50000–50100** (voice and screen-share media). Open them in your cloud provider's security group or network firewall. The script sets up the server's own firewall (UFW) for you; see [Firewall and IP allowlist](#firewall-and-ip-allowlist). |
 | **Email (optional)** | An SMTP account (Microsoft 365, Google Workspace relay, Amazon SES, SendGrid, Mailgun, Postmark…) lets War Room email the 6-digit codes itself. Without it, the codes are shown to whoever sends the invite and they pass them on. See [Codes without email](#3-inviting-people). |
 
 ### Setting the DNS record
@@ -55,7 +55,7 @@ The script asks:
 1. **Domain**: the DNS name from step 1 (it suggests the sslip.io name).
 2. **Your email**: pre-filled on the admin setup page; also how you'll sign back in later.
 3. **SMTP server** (press Enter to skip): host, port (587 for STARTTLS, 465 for TLS), username, password, from address.
-4. **Firewall**: if `ufw` or `firewalld` is active, whether to open War Room's ports in it. Then **which IP addresses may connect**: a comma-separated list of addresses or ranges, or blank for everyone. See below.
+4. **Firewall (UFW)**: turns UFW on if it's off (keeping SSH open), then asks **which IP addresses may connect**: a comma-separated list of addresses or ranges, or blank for everyone. See below.
 
 It then downloads the three files Docker needs (`docker-compose.yml`, `Caddyfile`, `livekit.yaml`), pulls the War Room image from `ghcr.io/tf-anguskong/warroom`, starts War Room, LiveKit (voice) and Caddy (HTTPS), waits until it's healthy, and prints:
 
@@ -68,20 +68,38 @@ One-time admin link (works once, until 2026-11-19 11:42Z):
 
 ### Firewall and IP allowlist
 
-**Host firewall.** If `ufw` or `firewalld` is active, the script offers to open TCP 80, 443, 7881 and UDP 50000–50100 in it (needs `sudo`). `down` offers to close them again.
+The allowlist lives in the server's own firewall, **UFW** (it needs `sudo`):
 
-**Who can connect.** The script asks:
+1. **UFW on.** If UFW isn't installed, the script offers to install it. If it's off, it offers to turn it on, after allowing the SSH port you're connected on so you can't lock yourself out. Incoming connections are blocked by default from then on.
+2. **Who can connect.** The script asks:
+
+   ```
+   Allowed addresses: 203.0.113.7, 198.51.100.0/24, 2001:db8::/32
+   ```
+
+   - **Blank** (the default): War Room's ports are open to everyone. People still need an invite link *and* a code to get in.
+   - **A list:** only those addresses (single IPs or CIDR ranges, IPv4 or IPv6) can reach War Room's web pages and voice. Everyone who joins, guests included, must come from a listed address, so include your office or VPN egress ranges and any outside firm's addresses. The script shows the address you're connected from, as a reminder to include it.
+   - **Port 80 stays open to everyone**, because Let's Encrypt has to reach it to issue and renew the certificate. It only redirects to HTTPS.
+
+The result is ordinary UFW rules, each tagged `warroom-now`, so you can see them with `sudo ufw status` and UFW keeps them across reboots:
 
 ```
-Allowed addresses: 203.0.113.7, 198.51.100.0/24, 2001:db8::/32
+80/tcp                     ALLOW       Anywhere          # warroom-now
+443/tcp                    ALLOW       203.0.113.7       # warroom-now
+7881/tcp                   ALLOW       203.0.113.7       # warroom-now
+50000:50100/udp            ALLOW       203.0.113.7       # warroom-now
+443/tcp                    ALLOW FWD   203.0.113.7       # warroom-now
+…
+50000:50100/udp            DENY FWD    Anywhere          # warroom-now
 ```
 
-- **Blank** (the default) means anyone on the internet can reach the sign-in page. They still need an invite link *and* a code to get in.
-- **A list** means only those addresses (single IPs or CIDR ranges, IPv4 or IPv6) can reach War Room's web pages and voice. Everyone who joins, guests included, must come from a listed address, so include your office or VPN egress ranges and any outside firm's addresses. The script shows the address you're connected from, as a reminder to include it.
-- **Port 80 stays open to everyone**, because Let's Encrypt has to reach it to issue and renew the certificate. It only redirects to HTTPS.
-- Change the list any time with `bash warroom-now.sh firewall`. Press Enter to keep the current list, or type `all` to allow everyone again.
+Change the list any time with `bash warroom-now.sh firewall`: press Enter to keep it, type a new list, or type `all` to allow everyone again. An invalid address changes nothing.
 
-How it works: Docker's published ports **bypass `ufw` and `firewalld`**, so a "deny" rule there would not actually block anyone. The allowlist is enforced in Docker's own `DOCKER-USER` firewall chain instead, for new connections arriving on the server's internet-facing interface. A small systemd service (`warroom-now-firewall`) re-applies it after every reboot, and `up` re-applies it too. `down` removes the rules and the service.
+**Why there are "FWD" rules.** Docker's published ports normally bypass UFW completely, so a plain UFW rule wouldn't stop anyone. The script adds the widely used [ufw-docker](https://github.com/chaifeng/ufw-docker) block to `/etc/ufw/after.rules` (marked, with a backup at `after.rules.warroom-now.bak`), which sends Docker's traffic through UFW's *route* (FWD) rules. That's why each allowed address has both a normal rule and a FWD rule. Side effect: other Docker containers on this server also need UFW `route allow` rules for their published ports, which is fine on a dedicated War Room server.
+
+**On `down`**, the script removes every `warroom-now` rule and the after.rules block. UFW stays on, and the SSH rule stays.
+
+**firewalld instead of UFW?** The script won't change firewalld; allow the ports there yourself and put the allowlist in your cloud firewall.
 
 Your cloud provider's firewall or security group is separate and the script can't change it. Open the same ports there; you can also put the same allowlist there for a second layer.
 
@@ -196,8 +214,8 @@ If the archive was changed in any way, or the passphrase is wrong, nothing is im
 | `bash warroom-now.sh status` | Shows the containers and the rooms. |
 | `bash warroom-now.sh export` | Encrypted archive of every room into `./exports/<time>/`. `export --plain` for unencrypted. |
 | `bash warroom-now.sh import FILE` | Restores a room archive. |
-| `bash warroom-now.sh firewall` | Changes which IP addresses may connect (and re-opens ports in `ufw` / `firewalld`). |
-| `bash warroom-now.sh down` | Offers an export, then destroys containers and data, removes the IP allowlist, and offers to close the ports in `ufw` / `firewalld`. |
+| `bash warroom-now.sh firewall` | Changes which IP addresses may connect (UFW rules tagged `warroom-now`). |
+| `bash warroom-now.sh down` | Offers an export, then destroys containers and data, and offers to remove War Room's UFW rules (UFW and SSH stay on). |
 
 Pin a release with `WARROOM_VERSION=1.0.0 bash warroom-now.sh up` (default `latest`).
 
@@ -208,7 +226,7 @@ Pin a release with `WARROOM_VERSION=1.0.0 bash warroom-now.sh up` (default `late
 | Problem | Check |
 |---|---|
 | Browser says the certificate is invalid, or the site doesn't load | The A record must point at this server (`dig +short your.domain`) and TCP 80 and 443 must be open. Caddy's log: `docker compose -p warroom-now logs caddy`. Let's Encrypt can take a minute; after several failures it pauses for a while. |
-| Someone gets "can't connect" or a timeout | If you set an IP allowlist, their public address must be on it: they can check it at a site like ifconfig.me. Add it with `bash warroom-now.sh firewall`. |
+| Someone gets "can't connect" or a timeout | If you set an IP allowlist, their public address must be on it: they can check it at a site like ifconfig.me. Add it with `bash warroom-now.sh firewall`. Blocked attempts show in the system log as `[UFW DOCKER BLOCK]` or `[UFW BLOCK]`. |
 | Voice or screen share won't connect, or connects with no sound | UDP 50000–50100 and TCP 7881 must be open to the internet. Some corporate networks block UDP entirely; War Room NOW doesn't include a TURN relay yet, so people on those networks may not get voice (chat and everything else still work). |
 | Codes aren't arriving | Admin → Settings → Email → **Test**, then Admin → Integrations → **Send test email**. Check spam. Meanwhile use **New code** / **Sign-in code** to hand codes out yourself. |
 | Lost the admin link / locked out | `bash warroom-now.sh link` on the server. |
@@ -238,7 +256,7 @@ Pin a release with `WARROOM_VERSION=1.0.0 bash warroom-now.sh up` (default `late
 
 **Not done yet:**
 
-- **The firewall step on a real server.** Opening `ufw`, the allowlist rules, keeping and clearing the list, re-applying after a reboot, and cleanup on `down` are tested in an Ubuntu container (17 checks). Blocking real traffic on a cloud VM, and `firewalld`, haven't been tried yet.
+- **The firewall step on a real server.** Turning UFW on with SSH kept, the ufw-docker link, the allowlist rules (IPv4 and IPv6), keeping and clearing the list, rejecting bad input, and cleanup on `down` are tested in an Ubuntu container (19 checks). Blocking real traffic to Docker on a cloud VM hasn't been tried yet.
 - **A full `warroom-now.sh` run on a real cloud server** with real DNS and Let's Encrypt. The image builds and the pieces are tested individually, but the whole script hasn't been run end to end on a public server.
 - **Emailed codes for responders and email sign-in** use the same email code path as guests, but haven't been run against a real mail provider in quick mode.
 - **TURN relay** for networks that block UDP (see Troubleshooting).

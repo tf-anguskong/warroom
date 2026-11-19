@@ -76,18 +76,16 @@ wait_healthy() {
   echo; die "War Room didn't start. Look at: docker compose -p warroom-now logs app"
 }
 
-# ---------- firewall ----------
+# ---------- firewall (UFW) ----------
 #
-# Two separate things:
-#  1. Host firewall (ufw / firewalld): opened for War Room's ports if it's active.
-#  2. IP allowlist: Docker's published ports bypass ufw and firewalld, so blocking there does nothing.
-#     The allowlist is enforced in Docker's own DOCKER-USER chain instead, for 443/tcp, 7881/tcp and
-#     UDP 50000-50100. Port 80 stays open to everyone: Let's Encrypt must reach it to issue the
-#     certificate, and it only redirects to HTTPS. A systemd unit re-applies the allowlist at boot.
+# The IP allowlist lives in UFW. Docker's published ports normally bypass UFW, so the script adds
+# the standard "ufw-docker" block to /etc/ufw/after.rules (marked, backed up) which sends Docker's
+# traffic through UFW's route rules. Then everything is plain UFW: `ufw status` shows who's allowed,
+# and UFW keeps the rules across reboots. All War Room rules carry the comment "warroom-now".
+# Port 80 always stays open: Let's Encrypt must reach it for the certificate (it only redirects).
 
-TCP_PORTS="80 443 7881"
-UDP_RANGE="50000:50100"
-UNIT=/etc/systemd/system/warroom-now-firewall.service
+UFW_TAG=warroom-now
+AFTER_RULES=/etc/ufw/after.rules
 
 SUDO=""
 need_root() {
@@ -97,38 +95,122 @@ need_root() {
   fi
 }
 
-host_firewall() {
-  if command -v ufw >/dev/null 2>&1 && $SUDO ufw status 2>/dev/null | grep -q "Status: active"; then echo ufw
-  elif command -v firewall-cmd >/dev/null 2>&1 && $SUDO firewall-cmd --state >/dev/null 2>&1; then echo firewalld
-  else echo none; fi
+ufw_installed() { command -v ufw >/dev/null 2>&1; }
+ufw_active() { ufw_installed && $SUDO ufw status 2>/dev/null | grep -q "Status: active"; }
+
+# The SSH port this session uses (so turning UFW on can't lock you out).
+ssh_port() { local p="${SSH_CONNECTION:-}"; p="${p##* }"; [[ "$p" =~ ^[0-9]+$ ]] && echo "$p" || echo 22; }
+
+# Make UFW govern Docker's published ports (ufw-docker). Idempotent.
+ufw_docker_link() {
+  $SUDO grep -q "# BEGIN UFW AND DOCKER" "$AFTER_RULES" && return 0
+  $SUDO cp "$AFTER_RULES" "$AFTER_RULES.warroom-now.bak"
+  $SUDO tee -a "$AFTER_RULES" >/dev/null <<'EOF'
+
+# BEGIN UFW AND DOCKER (added by warroom-now.sh: UFW rules now apply to Docker's published ports)
+*filter
+:ufw-user-forward - [0:0]
+:ufw-docker-logging-deny - [0:0]
+:DOCKER-USER - [0:0]
+-A DOCKER-USER -m conntrack --ctstate RELATED,ESTABLISHED -j RETURN
+-A DOCKER-USER -j ufw-user-forward
+
+-A DOCKER-USER -j RETURN -s 10.0.0.0/8
+-A DOCKER-USER -j RETURN -s 172.16.0.0/12
+-A DOCKER-USER -j RETURN -s 192.168.0.0/16
+
+-A DOCKER-USER -p udp -m udp --sport 53 --dport 1024:65535 -j RETURN
+
+-A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 192.168.0.0/16
+-A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 10.0.0.0/8
+-A DOCKER-USER -j ufw-docker-logging-deny -p tcp -m tcp --tcp-flags FIN,SYN,RST,ACK SYN -d 172.16.0.0/12
+-A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 192.168.0.0/16
+-A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 10.0.0.0/8
+-A DOCKER-USER -j ufw-docker-logging-deny -p udp -m udp --dport 0:32767 -d 172.16.0.0/12
+
+-A DOCKER-USER -j RETURN
+
+-A ufw-docker-logging-deny -m limit --limit 3/min --limit-burst 10 -j LOG --log-prefix "[UFW DOCKER BLOCK] "
+-A ufw-docker-logging-deny -j DROP
+
+COMMIT
+# END UFW AND DOCKER
+EOF
 }
 
-open_host_firewall() {
-  local fw; fw="$(host_firewall)"
-  case "$fw" in
-    ufw)
-      for p in $TCP_PORTS; do $SUDO ufw allow "$p/tcp" comment warroom-now >/dev/null; done
-      $SUDO ufw allow "$UDP_RANGE/udp" comment warroom-now >/dev/null
-      echo "Opened TCP $TCP_PORTS and UDP ${UDP_RANGE/:/-} in ufw." ;;
-    firewalld)
-      for p in $TCP_PORTS; do $SUDO firewall-cmd -q --permanent --add-port="$p/tcp"; done
-      $SUDO firewall-cmd -q --permanent --add-port="${UDP_RANGE/:/-}/udp"
-      $SUDO firewall-cmd -q --reload
-      echo "Opened TCP $TCP_PORTS and UDP ${UDP_RANGE/:/-} in firewalld." ;;
-    *) echo "No active ufw or firewalld found on this server; nothing to open here." ;;
-  esac
+# Undo ufw_docker_link (only the block this script added).
+ufw_docker_unlink() {
+  $SUDO grep -q "# BEGIN UFW AND DOCKER (added by warroom-now.sh" "$AFTER_RULES" 2>/dev/null || return 0
+  $SUDO sed -i '/^# BEGIN UFW AND DOCKER (added by warroom-now.sh/,/^# END UFW AND DOCKER/d' "$AFTER_RULES"
+  # Drop the blank line left before the block.
+  $SUDO sed -i -e :a -e '/^\n*$/{$d;N;ba' -e '}' "$AFTER_RULES"
 }
 
-close_host_firewall() {
-  case "$(host_firewall)" in
-    ufw)
-      for p in $TCP_PORTS; do $SUDO ufw delete allow "$p/tcp" >/dev/null 2>&1 || true; done
-      $SUDO ufw delete allow "$UDP_RANGE/udp" >/dev/null 2>&1 || true ;;
-    firewalld)
-      for p in $TCP_PORTS; do $SUDO firewall-cmd -q --permanent --remove-port="$p/tcp" 2>/dev/null || true; done
-      $SUDO firewall-cmd -q --permanent --remove-port="${UDP_RANGE/:/-}/udp" 2>/dev/null || true
-      $SUDO firewall-cmd -q --reload ;;
-  esac
+# Delete every rule tagged warroom-now (highest number first so numbers don't shift).
+ufw_clear_rules() {
+  local n
+  for n in $({ $SUDO ufw status numbered 2>/dev/null || true; } | { grep "# $UFW_TAG\$" || true; } | sed -E 's/^\[ *([0-9]+)\].*/\1/' | sort -rn); do
+    $SUDO ufw --force delete "$n" >/dev/null
+  done
+}
+
+# One "from" for both the host (INPUT, e.g. IPv6 via docker-proxy) and Docker's forwarded traffic.
+ufw_allow_from() { # ufw_allow_from SRC
+  local src="$1"
+  $SUDO ufw allow from "$src" to any port 443 proto tcp comment "$UFW_TAG" >/dev/null
+  $SUDO ufw allow from "$src" to any port 7881 proto tcp comment "$UFW_TAG" >/dev/null
+  $SUDO ufw allow from "$src" to any port 50000:50100 proto udp comment "$UFW_TAG" >/dev/null
+  $SUDO ufw route allow proto tcp from "$src" to any port 443 comment "$UFW_TAG" >/dev/null
+  $SUDO ufw route allow proto tcp from "$src" to any port 7881 comment "$UFW_TAG" >/dev/null
+  $SUDO ufw route allow proto udp from "$src" to any port 50000:50100 comment "$UFW_TAG" >/dev/null
+}
+
+# Write War Room's UFW rules from ALLOW_IPS (blank = everyone). Safe to run repeatedly.
+fw_apply() {
+  local list="${ALLOW_IPS:-}" e
+  ufw_active || { warn "UFW isn't active; War Room's firewall rules were not applied (run ./warroom-now.sh firewall)."; return 1; }
+  legacy_cleanup
+  ufw_docker_link
+  ufw_clear_rules
+  # Certificates: port 80 open to everyone.
+  $SUDO ufw allow 80/tcp comment "$UFW_TAG" >/dev/null
+  $SUDO ufw route allow proto tcp from any to any port 80 comment "$UFW_TAG" >/dev/null
+  if [ -z "$list" ]; then
+    ufw_allow_from any
+  else
+    for e in $list; do ufw_allow_from "$e"; done
+    # The ufw-docker block only blocks UDP below 32768; close the media range to everyone else.
+    $SUDO ufw route deny proto udp from any to any port 50000:50100 comment "$UFW_TAG" >/dev/null
+  fi
+  $SUDO ufw reload >/dev/null
+  if [ -n "$list" ]; then echo "UFW: only these addresses can reach War Room (HTTPS and voice): $list"
+  else echo "UFW: War Room's ports are open to everyone (they still need an invite and a code to get in)."; fi
+}
+
+# Earlier versions of this script used their own DOCKER-USER chain and a systemd unit; remove them.
+legacy_cleanup() {
+  local ipt rule
+  for ipt in iptables ip6tables; do
+    command -v "$ipt" >/dev/null 2>&1 || continue
+    { $SUDO "$ipt" -S DOCKER-USER 2>/dev/null || true; } | { grep -- '--comment warroom-now' || true; } | { grep -- '-j WARROOM-NOW' || true; } |
+      sed 's/^-A /-D /' | while read -r rule; do eval "$SUDO $ipt $rule" || true; done
+    $SUDO "$ipt" -F WARROOM-NOW 2>/dev/null || true
+    $SUDO "$ipt" -X WARROOM-NOW 2>/dev/null || true
+  done
+  if [ -f /etc/systemd/system/warroom-now-firewall.service ]; then
+    $SUDO systemctl disable -q warroom-now-firewall.service 2>/dev/null || true
+    $SUDO rm -f /etc/systemd/system/warroom-now-firewall.service
+    $SUDO systemctl daemon-reload 2>/dev/null || true
+  fi
+}
+
+# Remove everything War Room added to UFW (rules and the Docker link). Leaves UFW itself on.
+fw_remove() {
+  ufw_installed || return 0
+  legacy_cleanup
+  ufw_clear_rules
+  ufw_docker_unlink
+  ufw_active && $SUDO ufw reload >/dev/null || true
 }
 
 # Normalise "1.2.3.4, 10.0.0.0/8 ,2001:db8::/32" → space-separated list; dies on anything invalid.
@@ -146,83 +228,6 @@ parse_allowlist() {
   echo "${out# }"
 }
 
-# Remove our rules from DOCKER-USER (and the chain), for one of iptables / ip6tables.
-fw_clear_one() {
-  local ipt="$1" rule
-  command -v "$ipt" >/dev/null 2>&1 || return 0
-  $SUDO "$ipt" -S DOCKER-USER 2>/dev/null | grep -- '--comment warroom-now' | sed 's/^-A /-D /' | while read -r rule; do
-    eval "$SUDO $ipt $rule" || true
-  done
-  $SUDO "$ipt" -F WARROOM-NOW 2>/dev/null || true
-  $SUDO "$ipt" -X WARROOM-NOW 2>/dev/null || true
-}
-
-fw_apply_one() {
-  local ipt="$1" list="$2" ext="$3" e family
-  command -v "$ipt" >/dev/null 2>&1 || return 0
-  if ! $SUDO "$ipt" -n -L DOCKER-USER >/dev/null 2>&1; then
-    warn "$ipt: Docker's DOCKER-USER chain isn't there (is Docker running with its iptables firewall?); allowlist not applied for ${ipt}."
-    return 1
-  fi
-  fw_clear_one "$ipt"
-  [ -n "$list" ] || return 0
-  [ "$ipt" = ip6tables ] && family=6 || family=4
-  $SUDO "$ipt" -N WARROOM-NOW
-  for e in $list; do
-    if [ "$family" = 4 ] && [[ "$e" != *:* ]]; then $SUDO "$ipt" -A WARROOM-NOW -s "$e" -j RETURN; fi
-    if [ "$family" = 6 ] && [[ "$e" == *:* ]]; then $SUDO "$ipt" -A WARROOM-NOW -s "$e" -j RETURN; fi
-  done
-  $SUDO "$ipt" -A WARROOM-NOW -j DROP
-  # Only new connections arriving from outside, to War Room's ports (80 stays open for certificates).
-  $SUDO "$ipt" -I DOCKER-USER -i "$ext" -p tcp -m multiport --dports 443,7881 -m conntrack --ctstate NEW -m comment --comment warroom-now -j WARROOM-NOW
-  $SUDO "$ipt" -I DOCKER-USER -i "$ext" -p udp --dport "$UDP_RANGE" -m conntrack --ctstate NEW -m comment --comment warroom-now -j WARROOM-NOW
-}
-
-# Apply ALLOW_IPS from the state file (no prompts; also what the boot-time unit runs).
-fw_apply() {
-  local list="${ALLOW_IPS:-}" ext
-  ext="$(ip -o route show default 2>/dev/null | awk '{print $5; exit}')"
-  [ -n "$ext" ] || ext="$(ip -o -6 route show default 2>/dev/null | awk '{print $5; exit}')"
-  if [ -n "$list" ] && [ -z "$ext" ]; then warn "Couldn't find this server's internet-facing network interface; allowlist not applied."; return 1; fi
-  command -v iptables >/dev/null 2>&1 || { [ -z "$list" ] || warn "iptables isn't installed; the IP allowlist can't be applied."; return 0; }
-  fw_apply_one iptables "$list" "$ext" || true
-  fw_apply_one ip6tables "$list" "$ext" || true
-  if [ -n "$list" ]; then
-    install_unit
-    echo "Only these addresses can reach War Room (HTTPS and voice): $list"
-  else
-    remove_unit
-  fi
-}
-
-install_unit() {
-  command -v systemctl >/dev/null 2>&1 || { warn "No systemd: after a reboot, run ./warroom-now.sh up again to restore the IP allowlist."; return 0; }
-  local here; here="$(pwd)"
-  $SUDO tee "$UNIT" >/dev/null <<EOF
-[Unit]
-Description=War Room NOW IP allowlist (re-applied after Docker starts)
-After=docker.service
-Requires=docker.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/bin/env bash $here/warroom-now.sh firewall-apply
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  $SUDO systemctl daemon-reload
-  $SUDO systemctl enable -q warroom-now-firewall.service
-}
-
-remove_unit() {
-  [ -f "$UNIT" ] || return 0
-  $SUDO systemctl disable -q warroom-now-firewall.service 2>/dev/null || true
-  $SUDO rm -f "$UNIT"
-  $SUDO systemctl daemon-reload 2>/dev/null || true
-}
-
 save_state_var() { # save_state_var NAME VALUE
   local tmp; tmp="$(mktemp)"
   grep -v "^$1=" "$STATE" > "$tmp" || true
@@ -230,18 +235,31 @@ save_state_var() { # save_state_var NAME VALUE
   cat "$tmp" > "$STATE"; rm -f "$tmp"
 }
 
-# Interactive: open the host firewall, ask for allowed IPs, save and apply.
+# Interactive: make sure UFW is on, ask for allowed IPs, save and apply.
 ask_firewall() {
   need_root
   echo
-  bold "Firewall"
-  local fw a raw me=""
-  fw="$(host_firewall)"
-  if [ "$fw" != none ]; then
-    ask a "$fw is active. Open War Room's ports in it (TCP 80, 443, 7881 and UDP 50000-50100)? (Y/n)" "Y"
-    case "$a" in [nN]*) warn "Leaving $fw as it is; people may not be able to connect." ;; *) open_host_firewall ;; esac
-  else
-    echo "No active ufw or firewalld on this server."
+  bold "Firewall (UFW)"
+  local a raw me="" port
+  if ! ufw_installed; then
+    if command -v firewall-cmd >/dev/null 2>&1 && $SUDO firewall-cmd --state >/dev/null 2>&1; then
+      warn "This server uses firewalld, not UFW. Allow TCP 80, 443, 7881 and UDP 50000-50100 there yourself."
+      warn "(Docker's published ports bypass firewalld's normal rules; restrict by IP in your cloud firewall instead.)"
+      return 0
+    fi
+    ask a "UFW isn't installed. Install it to manage who can connect? (Y/n)" "Y"
+    case "$a" in [nN]*) warn "No host firewall: allow the ports in your cloud firewall instead."; return 0 ;; esac
+    if command -v apt-get >/dev/null; then $SUDO apt-get install -y -qq ufw >/dev/null || die "couldn't install ufw"
+    elif command -v dnf >/dev/null; then $SUDO dnf install -y -q ufw >/dev/null || die "couldn't install ufw"
+    else die "install ufw with your package manager, then run ./warroom-now.sh firewall"; fi
+  fi
+  if ! ufw_active; then
+    port="$(ssh_port)"
+    ask a "UFW is off. Turn it on? SSH (port $port) stays allowed so you won't be locked out. (Y/n)" "Y"
+    case "$a" in [nN]*) warn "UFW stays off: allow the ports in your cloud firewall instead."; return 0 ;; esac
+    $SUDO ufw allow "$port/tcp" comment "ssh (kept by warroom-now)" >/dev/null
+    $SUDO ufw --force enable >/dev/null
+    echo "UFW is on (incoming blocked by default; SSH on port $port allowed)."
   fi
   echo
   echo "Restrict who can connect? Enter IP addresses or CIDR ranges separated by commas,"
@@ -251,22 +269,17 @@ ask_firewall() {
   [ -n "${ALLOW_IPS:-}" ] && echo "Press Enter to keep the current list, or type all to allow everyone again."
   ask raw "Allowed addresses" "${ALLOW_IPS:-}"
   case "$(echo "$raw" | tr '[:upper:]' '[:lower:]' | tr -d ' ')" in all | any | everyone | '*') raw="" ;; esac
-  ALLOW_IPS="$(parse_allowlist "$raw")"
+  local parsed
+  parsed="$(parse_allowlist "$raw")" || die "nothing was changed; run ./warroom-now.sh firewall to try again"
+  ALLOW_IPS="$parsed"
   save_state_var ALLOW_IPS "$ALLOW_IPS"
   fw_apply
-  [ -n "$ALLOW_IPS" ] || echo "Anyone on the internet can reach War Room (they still need an invite and a code to get in)."
-  warn "Also open the same ports in your cloud provider's firewall / security group; this script can't change that."
+  warn "Also allow the same ports in your cloud provider's firewall / security group; this script can't change that."
 }
 
 cmd_firewall() {
   need_docker; load_state
   ask_firewall
-}
-
-# Used by the boot-time unit: re-apply the saved allowlist without asking anything.
-cmd_firewall_apply() {
-  load_state
-  fw_apply
 }
 
 admin_link() {
@@ -279,8 +292,6 @@ cmd_up() {
   if [ -f "$STATE" ]; then
     load_state
     bold "Starting War Room NOW at https://$APP_DOMAIN (settings from $STATE)"
-    # Re-apply a saved IP allowlist (it's lost on reboot if systemd isn't there to do it).
-    [ -z "${ALLOW_IPS:-}" ] || { need_root; fw_apply; }
   else
     bold "War Room NOW: a temporary War Room for one incident"
     echo "It needs a DNS name pointing at this server (for HTTPS, which browsers require for voice)."
@@ -326,7 +337,7 @@ cmd_up() {
     echo "An admin already exists. Lost access? ./warroom-now.sh link"
   fi
   echo
-  if [ -n "${ALLOW_IPS:-}" ]; then echo "Allowed addresses: $ALLOW_IPS  (change with ./warroom-now.sh firewall)"; fi
+  if [ -n "${ALLOW_IPS:-}" ]; then echo "Allowed addresses (UFW): $ALLOW_IPS  (change with ./warroom-now.sh firewall)"; fi
   echo "Cloud firewall / security group: allow TCP 80, 443, 7881 and UDP 50000-50100 to this server."
   warn "This War Room is temporary. Before you destroy the server: ./warroom-now.sh export (or down, which offers it)."
 }
@@ -393,11 +404,10 @@ cmd_down() {
   ask a "Type the domain ($APP_DOMAIN) to confirm" ""
   [ "$a" = "$APP_DOMAIN" ] || die "not confirmed; nothing was deleted"
   dc down --volumes --remove-orphans
-  need_root
-  fw_clear_one iptables; fw_clear_one ip6tables; remove_unit
-  if [ "$(host_firewall)" != none ]; then
-    ask a "Close War Room's ports in $(host_firewall) again? (Y/n)" "Y"
-    case "$a" in [nN]*) ;; *) close_host_firewall ;; esac
+  if ufw_installed; then
+    need_root
+    ask a "Remove War Room's rules from UFW? (UFW stays on; SSH stays allowed) (Y/n)" "Y"
+    case "$a" in [nN]*) ;; *) fw_remove; echo "Removed War Room's UFW rules." ;; esac
   fi
   rm -f "$STATE"
   bold "War Room NOW is gone from this server."
@@ -412,6 +422,5 @@ case "${1:-}" in
   import) shift; cmd_import "$@" ;;
   down) cmd_down ;;
   firewall) cmd_firewall ;;
-  firewall-apply) cmd_firewall_apply ;;
   *) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac
