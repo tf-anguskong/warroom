@@ -271,6 +271,12 @@ export function Sidebar({ state, presence, view, unread, mentions, onView, onJoi
               <span className="nav-label">Who’s doing what</span>
             </button>
           </div>
+          <div className={`nav-item ${view.kind === 'files' ? 'active' : ''}`}>
+            <button className="nav-main" onClick={() => onView({ kind: 'files' })}>
+              <span className="nav-icon">{Icons.folder}</span>
+              <span className="nav-label">Files</span>
+            </button>
+          </div>
           <div className={`nav-item ${view.kind === 'investigate' ? 'active' : ''}`}>
             <button className="nav-main" onClick={() => onView({ kind: 'investigate' })}>
               <span className="nav-icon">{Icons.search}</span>

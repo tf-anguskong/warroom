@@ -123,6 +123,30 @@ export interface Message {
   mentionNames: Record<string, string>;
   createdAt: string;
   editedAt: string | null;
+  attachments: FileItem[];
+}
+
+/** A file or screenshot uploaded in a war room. */
+export interface FileItem {
+  id: string;
+  incidentId: string;
+  channelId: string | null;
+  messageId: string | null;
+  noteId: string | null;
+  source: 'chat' | 'note' | 'evidence';
+  name: string;
+  size: number;
+  sha256: string;
+  image: boolean;
+  type: string;
+  description: string;
+  uploadedBy: string | null;
+  uploadedByName: string | null;
+  uploadedAt: string;
+  deleted: boolean;
+  deletedByName: string | null;
+  deletedAt: string | null;
+  url: string;
 }
 
 export interface TimelineEntry {
@@ -179,6 +203,7 @@ export type View =
   | { kind: 'channel'; id: string }
   | { kind: 'sheet'; id: string }
   | { kind: 'note'; id: string }
+  | { kind: 'files' }
   | { kind: 'timeline' }
   | { kind: 'investigate' }
   | { kind: 'roster' };

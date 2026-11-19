@@ -21,6 +21,7 @@ import { mailStatus } from './mail.js';
 import { mentionedUserIds, mentionsToText, resolveMentions } from './mentions.js';
 import { canSee, guestsOf } from './guests.js';
 import { notesFor, notesForExport } from './notes.js';
+import { attachmentsOf, attachToMessage, filesForExport, pendingUploads } from './files.js';
 import { linkedProviders, providerLabel, ssoProviders } from './sso.js';
 
 interface IncidentRow {
@@ -140,6 +141,7 @@ function serializeMessage(m: MessageRow) {
     ),
     createdAt: m.created_at,
     editedAt: m.edited_at,
+    attachments: attachmentsOf(m.id),
   };
 }
 
@@ -182,7 +184,7 @@ export function addTimeline(
  * Post a message. For people's messages, `incidentId` is the war room it was sent from; it decides
  * who `@here` and role mentions reach (a shared channel can be open in several war rooms).
  */
-export function postMessage(channelId: string, userId: string | null, body: string, kind = 'msg', incidentId?: string) {
+export function postMessage(channelId: string, userId: string | null, body: string, kind = 'msg', incidentId?: string, attachments: string[] = []) {
   const id = newId();
   q.run(
     'INSERT INTO messages (id, channel_id, user_id, body, kind, created_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -194,6 +196,7 @@ export function postMessage(channelId: string, userId: string | null, body: stri
     now(),
   );
   if (kind === 'msg' && userId) recordMentions(id, channelId, userId, body, incidentId);
+  if (attachments.length && userId) attachToMessage(id, channelId, userId, attachments);
   const msg = serializeMessage(q.get<MessageRow>('SELECT * FROM messages WHERE id = ?', id)!);
   emitToChannel(channelId, 'message:new', msg);
   return msg;
@@ -1172,8 +1175,11 @@ api.post(
   h((req) => {
     const ch = mustChannel(req.params.id);
     const body = str(req.body?.body, 20000);
-    if (!body) throw new HttpError(400, 'empty message');
-    return { message: postMessage(ch.id, req.user!.id, body, 'msg', str(req.body?.incidentId) || undefined) };
+    const wanted = Array.isArray(req.body?.attachments) ? req.body.attachments.map(String).slice(0, 10) : [];
+    const attachments = pendingUploads(ch.id, req.user!.id, wanted);
+    if (wanted.length && attachments.length !== wanted.length) throw new HttpError(400, 'an attachment is missing or already sent; upload it again');
+    if (!body && !attachments.length) throw new HttpError(400, 'empty message');
+    return { message: postMessage(ch.id, req.user!.id, body, 'msg', str(req.body?.incidentId) || undefined, attachments) };
   }),
 );
 
@@ -1338,6 +1344,8 @@ api.get(
     );
     const noteLines = notesForExport(inc.id);
     if (noteLines.length) lines.push('', ...noteLines);
+    const fileLines = filesForExport(inc.id);
+    if (fileLines.length) lines.push('', ...fileLines);
     if (pins.length) {
       lines.push('', '## Pinned messages', '');
       for (const p of pins) {

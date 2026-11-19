@@ -5,6 +5,7 @@ A self-hosted collaboration space for IT and security incident response. Every i
 - **Voice**: a Main Bridge plus any number of **breakout rooms**, with speaking indicators, mute/deafen, and **screen sharing**. Runs on a self-hosted [LiveKit](https://livekit.io) SFU, so 50+ people per room is fine.
 - **Text channels** that can be **attached to several voice rooms** and **shared across incidents** (both war rooms see and post to the same channel).
 - A **native spreadsheet** per incident: typed columns (text, number, select, date, person, checkbox), formulas (`=SUM`, `=COUNTIF`, `=IF`, …), live cursors of other editors, paste from Excel or SIEM exports, and CSV export. Templates: IOC Tracker, Affected Assets, Action Items, Comms Log.
+- **Files and screenshots**: paste a screenshot straight into chat (or drop files, or use the paperclip); images show inline and open full size. Paste or drop images into notes too. Every file's **SHA-256** is recorded when it's uploaded. The **Files** view lists everything in the incident (evidence, chat attachments, note images) with size, hash, who and when, and is where you add **evidence** with a description; evidence uploads and every deletion go on the timeline, and the postmortem export lists all files with their hashes. Only images recognised by their bytes are shown in the browser; everything else downloads as an opaque file (with `nosniff` and a sandbox policy), so a disguised HTML or script file never runs. Deleting removes the bytes but keeps the record and hash. Guests can see and attach files only in the channels and notes they were given. The size limit is in Settings → General (100 MB by default); files live in `DATA_DIR/files`.
 - **Notes**: Markdown notepads next to the sheets (headings, lists, checklists you can tick in the preview, tables, code blocks, links). Edit, preview or both side by side; saves automatically and updates live for everyone. If two people edit at once, the second save is caught and they choose *Use theirs* or *Keep mine* instead of silently overwriting. Templates: Working notes, Shift handoff, Call notes. Notes are included in the postmortem export and can be downloaded as `.md`.
 - An **incident timeline** built automatically (declared, severity/status changes, roles, breakouts, joins, searches) plus human entries (notes, decisions, actions, findings, pinned messages), with back-dating and a **Markdown postmortem export**.
 - **Roles and status**: Incident Commander, Scribe, Comms Lead, Tech Lead, Security Lead; SEV1–SEV4; Investigating → Identified → Mitigating → Monitoring → Resolved.
@@ -40,6 +41,7 @@ server/src/
   guests.ts     single-use guest invites, guest scope checks and the guest route allowlist, expiry sweeper
   mentions.ts   @mention tokens: parsing, resolving roles and @here, plain-text export
   notes.ts      Markdown notes: storage, versioned saves, templates, export section
+  files.ts      uploads (streamed, hashed), safe downloads, evidence list, guest access
   realtime.ts   Socket.IO presence, live updates, sheet cursors
   templates.ts  sheet templates, roles, severities, statuses
   integrations/
@@ -208,7 +210,7 @@ Integrations are read-only: nothing is changed in Okta or Sumo Logic. Response a
 - `DEV_AUTH` defaults to on outside production and off when `NODE_ENV=production`. Never enable it on a reachable server.
 - Every organization user can open every incident; guests are limited to what their invite grants. Restricted incidents (need-to-know, e.g. insider-threat cases) are not implemented yet.
 - Guest links are bearer links until used: send them directly to the person. Use short link lifetimes for sensitive incidents.
-- Chat, sheets, notes, search results and the timeline are stored unencrypted in SQLite; protect the volume and its backups accordingly.
+- Chat, sheets, notes, uploaded files, search results and the timeline are stored unencrypted in SQLite; protect the volume and its backups accordingly.
 - Voice is not recorded.
 
 ## Design

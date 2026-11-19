@@ -32,6 +32,7 @@ server/src/
   scim.ts         SCIM 2.0 (Okta / Entra provisioning)
   api.ts          incidents, channels, messages, voice, roles, assignments, sheets, export, admin
   notes.ts        Markdown notes; saves carry the version they started from (409 on conflict)
+  files.ts        uploads to DATA_DIR/files with SHA-256; downloads; Files view API
   guests.ts       guest invites, scopes, deny-by-default route allowlist, email codes, sweeper
   mail.ts         nodemailer transport (TLS required), dev outbox
   realtime.ts     Socket.IO: presence, incident rooms, guest-aware broadcast
@@ -80,6 +81,11 @@ docs/CLAUDE_DESIGN_PROMPT.md   design brief for Claude Design; update it when sc
 - Anything typed by a responder that goes into a provider query (Okta filter, Falcon FQL) is validated and quoted; never splice raw input into a query.
 - Pollers (Okta watches, tracked endpoints) stop when the incident resolves or the integration is disabled, cap how much they post per poll, and record errors on the row instead of throwing.
 - Links from provider data shown in the browser must be checked (https only).
+
+**Files.**
+- Uploads are raw bytes (`application/octet-stream`, real type in `X-File-Type`) so `express.json` never parses them; they stream to disk while hashing and stop at the size limit.
+- Only images recognised by magic bytes are served inline; everything else is `application/octet-stream` + `attachment`, always with `nosniff` and a sandbox CSP. Never serve uploaded content as HTML/SVG.
+- Notes only display images from `/api/files/<id>`; external images are not loaded.
 
 **Client.**
 - React 18 + Vite, plain CSS with tokens (no UI framework). Make controls the viewer can't use visibly read-only, with a short reason, instead of hiding them.

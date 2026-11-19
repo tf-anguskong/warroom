@@ -93,6 +93,8 @@ export const Icons = {
   grid: svg(<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /></>),
   note: svg(<><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M8 13h8M8 17h5" /></>),
   clock: svg(<><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></>),
+  paperclip: svg(<path d="m21 11-8.5 8.5a5 5 0 0 1-7-7L14 4a3.3 3.3 0 0 1 4.7 4.7l-8.5 8.5a1.7 1.7 0 0 1-2.4-2.4L15.5 7" />),
+  folder: svg(<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />),
   plus: svg(<path d="M12 5v14M5 12h14" />),
   pin: svg(<><path d="M12 17v5M9 10.8V5h6v5.8l2 3.2H7z" /><path d="M8 5h8" /></>),
   flag: svg(<><path d="M4 22V4a1 1 0 0 1 1-1h12l-2 4 2 4H5" /></>),

@@ -12,6 +12,7 @@ import { ScreenStage } from '../components/ScreenStage';
 import { ChatView } from '../components/ChatView';
 import { SheetView } from '../components/SheetView';
 import { NoteView } from '../components/NoteView';
+import { FilesView } from '../components/Files';
 import { TimelineView } from '../components/TimelineView';
 import { InvestigateView } from '../components/InvestigateView';
 import { RosterView } from '../components/RosterView';
@@ -26,12 +27,13 @@ export function IncidentRoom() {
   );
 }
 
-const viewKey = (v: View) => (v.kind === 'timeline' || v.kind === 'investigate' || v.kind === 'roster' ? v.kind : `${v.kind}:${v.id}`);
+const viewKey = (v: View) => ('id' in v ? `${v.kind}:${v.id}` : v.kind);
 function parseView(s: string | null): View | null {
   if (!s) return null;
   if (s === 'timeline') return { kind: 'timeline' };
   if (s === 'investigate') return { kind: 'investigate' };
   if (s === 'roster') return { kind: 'roster' };
+  if (s === 'files') return { kind: 'files' };
   const [kind, id] = s.split(':');
   if ((kind === 'channel' || kind === 'sheet' || kind === 'note') && id) return { kind, id };
   return null;
@@ -67,6 +69,7 @@ function Room({ incidentId }: { incidentId: string }) {
     if (requested?.kind === 'sheet' && state.sheets.some((s) => s.id === requested.id)) return requested;
     if (requested?.kind === 'note' && state.notes.some((n) => n.id === requested.id)) return requested;
     if (requested?.kind === 'timeline' || requested?.kind === 'investigate' || requested?.kind === 'roster') return requested;
+    if (requested?.kind === 'files' && !me.isGuest) return requested;
     return state.channels[0] ? { kind: 'channel', id: state.channels[0].id } : { kind: 'timeline' };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state, params]);
@@ -269,6 +272,7 @@ function Room({ incidentId }: { incidentId: string }) {
           {view.kind === 'sheet' && <SheetView key={view.id} sheetId={view.id} state={state} presence={presence} />}
           {view.kind === 'note' && <NoteView key={view.id} noteId={view.id} state={state} presence={presence} />}
           {view.kind === 'timeline' && <TimelineView state={state} onOpenChannel={(id) => setView({ kind: 'channel', id })} />}
+          {view.kind === 'files' && <FilesView state={state} onOpenChannel={(id) => setView({ kind: 'channel', id })} onOpenNote={(id) => setView({ kind: 'note', id })} />}
           {view.kind === 'roster' && <RosterView state={state} presence={presence} onOpenChannel={(id) => setView({ kind: 'channel', id })} />}
           {view.kind === 'investigate' && (
             <InvestigateView

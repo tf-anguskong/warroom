@@ -5,7 +5,9 @@ import { getSocket } from '../lib/socket';
 import { localTime, plainText, renderMessage, utcTime, type MentionLookup } from '../lib/format';
 import type { IncidentState, Message, Presence } from '../types';
 import { Avatar, Icons } from './ui';
-import { MentionComposer } from './MentionComposer';
+import { MentionComposer, type ComposerHandle } from './MentionComposer';
+import { Attachments } from './Files';
+import { filesFrom } from '../lib/upload';
 import { AssignDialog } from './AssignDialog';
 import { GuestTag } from './Guests';
 
@@ -35,6 +37,8 @@ export function ChatView({
   const [showPins, setShowPins] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [assigning, setAssigning] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const composer = useRef<ComposerHandle>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const resolved = state.incident.status === 'resolved';
@@ -55,12 +59,16 @@ export function ChatView({
       if (m.mentions.includes(me.id)) markRead();
     };
     const onUpd = (m: Message) => m.channelId === channelId && setMessages((ms) => ms?.map((x) => (x.id === m.id ? m : x)) ?? ms);
+    const onFiles = (e: { messageId: string; channelId: string; attachments: Message['attachments'] }) =>
+      e.channelId === channelId && setMessages((ms) => ms?.map((x) => (x.id === e.messageId ? { ...x, attachments: e.attachments } : x)) ?? ms);
     s.on('message:new', onNew);
     s.on('message:updated', onUpd);
+    s.on('message:files', onFiles);
     return () => {
       alive = false;
       s.off('message:new', onNew);
       s.off('message:updated', onUpd);
+      s.off('message:files', onFiles);
     };
   }, [channelId, me.id]);
 
@@ -101,10 +109,10 @@ export function ChatView({
     });
   };
 
-  const send = async (body: string) => {
+  const send = async (body: string, attachments: string[]) => {
     stick.current = true;
     try {
-      await api.post(`/api/channels/${channelId}/messages`, { body, incidentId: state.incident.id });
+      await api.post(`/api/channels/${channelId}/messages`, { body, attachments, incidentId: state.incident.id });
       return true;
     } catch (e) {
       toast({ text: e instanceof Error ? e.message : 'Message failed', tone: 'error' });
@@ -138,7 +146,23 @@ export function ChatView({
   const pins = messages?.filter((m) => m.pinned) ?? [];
 
   return (
-    <div className={`chat ${compact ? 'compact' : ''}`}>
+    <div
+      className={`chat ${compact ? 'compact' : ''}`}
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes('Files')) {
+          e.preventDefault();
+          setDragging(true);
+        }
+      }}
+      onDragLeave={(e) => !e.currentTarget.contains(e.relatedTarget as Node | null) && setDragging(false)}
+      onDrop={(e) => {
+        const files = filesFrom(e.dataTransfer);
+        if (!files.length) return;
+        e.preventDefault();
+        setDragging(false);
+        composer.current?.addFiles(files);
+      }}
+    >
       {!compact && (
         <div className="view-head">
           <div>
@@ -199,7 +223,16 @@ export function ChatView({
         </div>
       )}
 
-      <div className="messages" ref={listRef} onScroll={onScroll}>
+      <div
+        className="messages"
+        ref={listRef}
+        onScroll={onScroll}
+        // Images load after the scroll; keep the view at the bottom if it was there.
+        onLoadCapture={() => {
+          const el = listRef.current;
+          if (el && stick.current) el.scrollTop = el.scrollHeight;
+        }}
+      >
         {messages === null ? (
           <div className="skeleton-list">
             <div className="skeleton sm" />
@@ -240,9 +273,10 @@ export function ChatView({
                       </div>
                     )}
                     <div className="msg-body">
-                      {renderMessage(m.body, copy, mentionLookup)}
+                      {m.body && renderMessage(m.body, copy, mentionLookup)}
                       {m.editedAt && <span className="muted small"> (edited)</span>}
                     </div>
+                    <Attachments files={m.attachments ?? []} />
                   </div>
                   <div className="msg-actions">
                     <button className="icon-btn sm" title={m.pinned ? 'Unpin' : 'Pin'} onClick={() => togglePin(m)}>
@@ -275,7 +309,10 @@ export function ChatView({
       </div>
 
       {assigning && <AssignDialog state={state} presence={presence} target={{ kind: 'channel', id: channelId }} onClose={() => setAssigning(false)} />}
+      {dragging && <div className="drop-overlay">Drop to attach to your message in #{channel.name}</div>}
       <MentionComposer
+        ref={composer}
+        channelId={channelId}
         key={channelId}
         state={state}
         presence={presence}

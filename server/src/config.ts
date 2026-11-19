@@ -95,6 +95,8 @@ export const config = {
   },
   /** When email is configured, every guest invite needs an email and a code to join (default on). */
   guestRequireEmail: bool(env.GUEST_REQUIRE_EMAIL, true),
+  /** Uploaded files and screenshots (stored in DATA_DIR/files). */
+  files: { maxMb: Number(env.MAX_UPLOAD_MB ?? 100) },
   livekit: {
     /** URL browsers use to reach LiveKit (ws:// or wss://). */
     url: env.LIVEKIT_URL ?? 'ws://localhost:7880',

@@ -1,7 +1,22 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useApp } from '../lib/app';
-import type { IncidentState, Presence } from '../types';
-import { Avatar } from './ui';
+import { filesFrom, humanSize, nameFor, uploadFile } from '../lib/upload';
+import type { FileItem, IncidentState, Presence } from '../types';
+import { Avatar, Icons } from './ui';
+
+interface Pending {
+  key: string;
+  name: string;
+  size: number;
+  preview: string | null;
+  progress: number;
+  item?: FileItem;
+  error?: string;
+}
+
+export interface ComposerHandle {
+  addFiles: (files: File[]) => void;
+}
 
 interface Candidate {
   token: string;
@@ -23,7 +38,9 @@ interface Props {
   state: IncidentState;
   presence: Presence[];
   placeholder: string;
-  onSend: (body: string) => Promise<boolean>;
+  /** Where uploads go; without it the composer has no attachments. */
+  channelId?: string;
+  onSend: (body: string, attachments: string[]) => Promise<boolean>;
 }
 
 /**
@@ -31,8 +48,35 @@ interface Props {
  * picked mention becomes a token (`<@userId>`, `<@role:commander>`, `<@here>`) so renames and
  * role handovers don't break it.
  */
-export function MentionComposer({ state, presence, placeholder, onSend }: Props) {
-  const { users, meta, me, userById } = useApp();
+export const MentionComposer = forwardRef<ComposerHandle, Props>(function MentionComposer({ state, presence, placeholder, channelId, onSend }, ref) {
+  const { users, meta, me, userById, toast } = useApp();
+  const [pending, setPending] = useState<Pending[]>([]);
+  const picker = useRef<HTMLInputElement>(null);
+
+  /** Start uploading straight away so Send is instant; the message only references finished uploads. */
+  const addFiles = (files: File[]) => {
+    if (!channelId || !files.length) return;
+    for (const file of files.slice(0, 10)) {
+      const key = `${Date.now()}-${Math.random()}`;
+      const preview = /^image\/(png|jpeg|gif|webp)$/.test(file.type) ? URL.createObjectURL(file) : null;
+      setPending((p) => [...p, { key, name: nameFor(file), size: file.size, preview, progress: 0 }]);
+      uploadFile(state.incident.id, file, { source: 'chat', channelId }, (f) => setPending((p) => p.map((x) => (x.key === key ? { ...x, progress: f } : x))))
+        .then((item) => setPending((p) => p.map((x) => (x.key === key ? { ...x, progress: 1, item } : x))))
+        .catch((e: Error) => {
+          setPending((p) => p.map((x) => (x.key === key ? { ...x, error: e.message } : x)));
+          toast({ text: `${nameFor(file)}: ${e.message}`, tone: 'error' }, 7000);
+        });
+    }
+  };
+  useImperativeHandle(ref, () => ({ addFiles }));
+  const removePending = (key: string) =>
+    setPending((p) => {
+      const x = p.find((y) => y.key === key);
+      if (x?.preview) URL.revokeObjectURL(x.preview);
+      return p.filter((y) => y.key !== key);
+    });
+  const uploading = pending.some((p) => !p.item && !p.error);
+  const ready = pending.filter((p) => p.item);
   const [draft, setDraft] = useState('');
   const [caret, setCaret] = useState(0);
   const [index, setIndex] = useState(0);
@@ -106,11 +150,18 @@ export function MentionComposer({ state, presence, placeholder, onSend }: Props)
 
   const send = async () => {
     const body = draft.trim();
-    if (!body) return;
+    if ((!body && !ready.length) || uploading) return;
     setDraft('');
-    const ok = await onSend(encode(body));
-    if (ok) picked.current.clear();
-    else setDraft(body);
+    const sentPending = pending;
+    setPending([]);
+    const ok = await onSend(encode(body), ready.map((p) => p.item!.id));
+    if (ok) {
+      picked.current.clear();
+      sentPending.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
+    } else {
+      setDraft(body);
+      setPending(sentPending);
+    }
   };
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -140,6 +191,26 @@ export function MentionComposer({ state, presence, placeholder, onSend }: Props)
   const sync = () => setCaret(box.current?.selectionStart ?? 0);
 
   return (
+    <div className="composer-wrap">
+      {pending.length > 0 && (
+        <div className="pending-files">
+          {pending.map((p) => (
+            <div key={p.key} className={`pending-file ${p.error ? 'failed' : ''}`} title={p.error ?? `${p.name} · ${humanSize(p.size)}`}>
+              {p.preview ? <img src={p.preview} alt="" /> : <span className="file-icon">{Icons.paperclip}</span>}
+              <span className="pending-name">{p.name}</span>
+              <span className="muted small">{p.error ? 'failed' : p.item ? humanSize(p.size) : `${Math.round(p.progress * 100)}%`}</span>
+              {!p.item && !p.error && (
+                <span className="pending-bar">
+                  <span style={{ width: `${Math.round(p.progress * 100)}%` }} />
+                </span>
+              )}
+              <button className="icon-btn sm" aria-label={`Remove ${p.name}`} onClick={() => removePending(p.key)}>
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     <div className="composer">
       {open && (
         <div className="mention-menu" role="listbox" aria-label="Mention someone">
@@ -162,8 +233,32 @@ export function MentionComposer({ state, presence, placeholder, onSend }: Props)
           ))}
         </div>
       )}
+      {channelId && (
+        <>
+          <button className="icon-btn attach-btn" title="Attach files or screenshots (you can also paste or drop them)" aria-label="Attach files" onClick={() => picker.current?.click()}>
+            {Icons.paperclip}
+          </button>
+          <input
+            ref={picker}
+            type="file"
+            multiple
+            hidden
+            onChange={(e) => {
+              addFiles([...(e.target.files ?? [])]);
+              e.target.value = '';
+            }}
+          />
+        </>
+      )}
       <textarea
         ref={box}
+        onPaste={(e) => {
+          const files = filesFrom(e.clipboardData);
+          if (files.length && channelId) {
+            e.preventDefault();
+            addFiles(files);
+          }
+        }}
         value={draft}
         onChange={(e) => {
           setDraft(e.target.value);
@@ -178,9 +273,10 @@ export function MentionComposer({ state, presence, placeholder, onSend }: Props)
         aria-autocomplete="list"
         aria-expanded={open}
       />
-      <button className="btn primary" onClick={send} disabled={!draft.trim()}>
+      <button className="btn primary" onClick={send} disabled={(!draft.trim() && !ready.length) || uploading} title={uploading ? 'Waiting for uploads to finish' : undefined}>
         Send
       </button>
     </div>
+    </div>
   );
-}
+});

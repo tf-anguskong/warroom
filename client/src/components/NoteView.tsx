@@ -5,6 +5,7 @@ import { api, ApiError } from '../lib/api';
 import { useApp } from '../lib/app';
 import { getSocket } from '../lib/socket';
 import { utcTime } from '../lib/format';
+import { filesFrom, nameFor, uploadFile } from '../lib/upload';
 import type { IncidentState, Presence } from '../types';
 import { Avatar, Icons, Modal } from './ui';
 
@@ -53,6 +54,7 @@ export function NoteView({ noteId, state, presence }: { noteId: string; state: I
   const [renaming, setRenaming] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [, tick] = useState(0);
+  const [uploading, setUploading] = useState(0);
   const area = useRef<HTMLTextAreaElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latest = useRef({ text: '', base: null as Note | null, saving: false, conflict: false, sent: null as string | null });
@@ -258,6 +260,29 @@ export function NoteView({ noteId, state, presence }: { noteId: string; state: I
     }
   };
 
+  /** Upload pasted or dropped files into this note and put a link (images: shown inline) at the cursor. */
+  const insertFiles = async (files: File[]) => {
+    const el = area.current;
+    for (const file of files.slice(0, 10)) {
+      setUploading((n) => n + 1);
+      try {
+        const f = await uploadFile(state.incident.id, file, { source: 'note', noteId });
+        const label = nameFor(file).replace(/[[\]]/g, '');
+        const md = f.image ? `![${label}](${f.url})` : `[${label}](${f.url}?download)`;
+        const cur = latest.current.text;
+        const at = el && document.activeElement === el ? el.selectionStart : cur.length;
+        const before = cur.slice(0, at);
+        const insert = `${before && !before.endsWith('\n') ? '\n' : ''}${md}\n`;
+        change(before + insert + cur.slice(at));
+        requestAnimationFrame(() => el?.setSelectionRange(at + insert.length, at + insert.length));
+      } catch (e) {
+        toast({ text: `${file.name || 'File'}: ${e instanceof Error ? e.message : 'upload failed'}`, tone: 'error' }, 7000);
+      } finally {
+        setUploading((n) => n - 1);
+      }
+    }
+  };
+
   /** Tick a checklist item in the preview: flip `[ ]` / `[x]` on that source line. */
   const toggleTask = (line: number) => {
     const lines = text.split('\n');
@@ -270,6 +295,13 @@ export function NoteView({ noteId, state, presence }: { noteId: string; state: I
   const components = useMemo<Components>(
     () => ({
       a: ({ node: _n, ...props }) => <a {...props} target="_blank" rel="noreferrer noopener" />,
+      // Only images uploaded to this War Room are shown; outside images could track who reads the note.
+      img: ({ node: _n, src, alt }) =>
+        typeof src === 'string' && /^\/api\/files\/[0-9a-f-]{36}$/.test(src) ? (
+          <img src={src} alt={alt ?? ''} loading="lazy" className="note-img" />
+        ) : (
+          <span className="muted small">[image not shown: {alt || 'external image'}]</span>
+        ),
       li: ({ node, className, children, ...props }) => {
         const line = node?.position?.start.line;
         if (!className?.includes('task-list-item') || !line) return <li className={className} {...props}>{children}</li>;
@@ -405,7 +437,7 @@ export function NoteView({ noteId, state, presence }: { noteId: string; state: I
           <button title="Table" onClick={() => wrap('\n| Column | Column |\n|---|---|\n| ', ' |  |\n', 'value')}>
             {Icons.grid}
           </button>
-          <span className="muted small note-hint">Markdown · Ctrl+S saves now · saves automatically</span>
+          <span className="muted small note-hint">{uploading ? `Uploading ${uploading}…` : 'Markdown · paste or drop screenshots · saves automatically'}</span>
         </div>
       )}
 
@@ -418,6 +450,21 @@ export function NoteView({ noteId, state, presence }: { noteId: string; state: I
             onChange={(e) => change(e.target.value)}
             onKeyDown={onKey}
             onBlur={() => status === 'dirty' && void save()}
+            onPaste={(e) => {
+              const files = filesFrom(e.clipboardData);
+              if (files.length) {
+                e.preventDefault();
+                void insertFiles(files);
+              }
+            }}
+            onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
+            onDrop={(e) => {
+              const files = filesFrom(e.dataTransfer);
+              if (files.length) {
+                e.preventDefault();
+                void insertFiles(files);
+              }
+            }}
             spellCheck
             placeholder={'# Heading\n\n- bullet\n- [ ] checklist item\n\n**bold**, `code`, [link](https://…)'}
             aria-label={`${base.name} (Markdown)`}

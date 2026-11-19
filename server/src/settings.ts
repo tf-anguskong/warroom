@@ -79,6 +79,11 @@ export const FIELDS: Field[] = [
     base: () => envDefaults.bootstrapAdmins, apply: (v) => (config.bootstrapAdmins = (v as string[]).map((s) => s.toLowerCase())),
   },
   {
+    key: 'files.maxMb', section: 'general', kind: 'number', min: 1, max: 4096, env: ['MAX_UPLOAD_MB'],
+    label: 'Largest file upload (MB)', help: 'Screenshots, logs and evidence attached in a war room. Files are stored in the data directory.',
+    base: () => envDefaults.files.maxMb, apply: (v) => (config.files.maxMb = v),
+  },
+  {
     key: 'devAuth', section: 'general', kind: 'bool', env: ['DEV_AUTH'],
     label: 'Development sign-in (name and email, no password)',
     help: 'For trying War Room locally. Never available in production.',

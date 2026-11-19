@@ -103,6 +103,10 @@ const RULES: Rule[] = [
   ['POST', new RegExp(`^/api/channels/${ID}/(messages|mentions/read)$`), (u, inc, m) => canSee(u, inc, 'channel', m[1])],
   ['PATCH', new RegExp(`^/api/messages/${ID}$`), (u, inc, m) => canSee(u, inc, 'channel', lookup.channelOf(m[1]))],
   ['POST', new RegExp(`^/api/voice-rooms/${ID}/token$`), (u, inc, m) => lookup.roomIncident(m[1]) === inc && canSee(u, inc, 'voice', m[1])],
+  // Files: the routes check the channel or note the file belongs to (see files.ts canOpen).
+  ['POST', new RegExp(`^/api/incidents/${ID}/files$`), (_u, inc, m) => m[1] === inc],
+  ['GET', new RegExp(`^/api/files/${ID}$`), () => true],
+  ['DELETE', new RegExp(`^/api/files/${ID}$`), () => true],
   ['GET', new RegExp(`^/api/notes/${ID}$`), (u, inc, m) => lookup.noteIncident(m[1]) === inc && canSee(u, inc, 'note', m[1])],
   ['PUT', new RegExp(`^/api/notes/${ID}/body$`), (u, inc, m) => lookup.noteIncident(m[1]) === inc && canSee(u, inc, 'note', m[1])],
   ['GET', new RegExp(`^/api/sheets/${ID}$`), (u, inc, m) => lookup.sheetIncident(m[1]) === inc && canSee(u, inc, 'sheet', m[1])],
