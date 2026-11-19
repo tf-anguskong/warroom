@@ -1,21 +1,39 @@
-# Production stack: War Room app + LiveKit media server + Caddy (automatic HTTPS).
-# Browsers require HTTPS/WSS for microphone and screen-share access, so run this behind real DNS names.
-#   1. Point two DNS names at this host and put them below (or export APP_DOMAIN / LIVEKIT_DOMAIN).
-#   2. Open ports 80, 443 (TCP), 7881 (TCP) and 50000-50100 (UDP).
-#   3. docker compose up -d --build
-#   4. docker compose logs app  → open the one-time setup link it prints, then configure
-#      sign-in, email and everything else in Admin → Settings. No .env file is needed.
+# War Room: app + LiveKit media server + Caddy (automatic HTTPS), all on ONE DNS name.
+# Browsers only allow microphone and screen share over HTTPS, so the name must point at this host.
+#
+# Temporary War Room for one incident (no identity provider needed; tear it down afterwards):
+#   ./warroom-now.sh up          — asks a few questions, starts everything, prints your admin link
+#   ./warroom-now.sh export      — encrypted archive of every room into ./exports
+#   ./warroom-now.sh down        — offers an export, then destroys containers AND data
+#
+# Permanent install (pulls the prebuilt image; add --build to build from this clone instead):
+#   APP_DOMAIN=warroom.example.com docker compose up -d
+#   docker compose logs app      — open the one-time setup link it prints; configure the rest in Admin → Settings
+#
+# Open TCP 80, 443, 7881 and UDP 50000-50100. No .env file is needed.
 services:
   app:
+    # Prebuilt image (linux/amd64 and arm64); `build: .` is used when you build from a clone instead.
+    image: ghcr.io/tf-anguskong/warroom:${WARROOM_VERSION:-latest}
     build: .
     restart: unless-stopped
     environment:
       # Starting values only; Admin → Settings overrides them.
       PUBLIC_URL: https://${APP_DOMAIN:-warroom.example.com}
-      LIVEKIT_URL: wss://${LIVEKIT_DOMAIN:-livekit.example.com}
+      # LiveKit's signalling (/rtc) is served on the same name by Caddy.
+      LIVEKIT_URL: wss://${APP_DOMAIN:-warroom.example.com}
       LIVEKIT_API_URL: http://livekit:7880
       # War Room makes the LiveKit key pair and writes it here for the LiveKit container.
       LIVEKIT_KEY_FILE: /keys/livekit-keys.yaml
+      # "now" = temporary quick War Room (email invites and email-code sign-in, export reminders).
+      WARROOM_MODE: ${WARROOM_MODE:-standard}
+      WARROOM_ADMIN_EMAIL: ${WARROOM_ADMIN_EMAIL:-}
+      # Optional: email for invite codes, ready from the first minute (also settable in Admin → Settings).
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
     volumes:
       - warroom-data:/data
       - livekit-keys:/keys
@@ -39,7 +57,6 @@ services:
     restart: unless-stopped
     environment:
       APP_DOMAIN: ${APP_DOMAIN:-warroom.example.com}
-      LIVEKIT_DOMAIN: ${LIVEKIT_DOMAIN:-livekit.example.com}
     ports:
       - "80:80"
       - "443:443"

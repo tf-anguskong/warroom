@@ -14,6 +14,7 @@ import { SheetView } from '../components/SheetView';
 import { NoteView } from '../components/NoteView';
 import { FilesView } from '../components/Files';
 import { ScheduleView } from '../components/ScheduleView';
+import { ExportRoomDialog, QuickBanner } from '../components/Archive';
 import { TimelineView } from '../components/TimelineView';
 import { InvestigateView } from '../components/InvestigateView';
 import { RosterView } from '../components/RosterView';
@@ -42,7 +43,7 @@ function parseView(s: string | null): View | null {
 }
 
 function Room({ incidentId }: { incidentId: string }) {
-  const { me, toast } = useApp();
+  const { me, toast, meta } = useApp();
   const voice = useVoice();
   const [state, setState] = useState<IncidentState | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -51,6 +52,7 @@ function Room({ incidentId }: { incidentId: string }) {
   const [unread, setUnread] = useState<Record<string, number>>({});
   const [mentions, setMentions] = useState<Record<string, number>>({});
   const [connected, setConnected] = useState(true);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const load = useCallback(() => {
     api
@@ -285,6 +287,8 @@ function Room({ incidentId }: { incidentId: string }) {
         onJoinVoice={joinVoice}
       />
       <main className="room-main">
+        {meta.mode === 'now' && !me.isGuest && <QuickBanner onExport={state.canControl || me.isAdmin ? () => setExportOpen(true) : undefined} />}
+        {exportOpen && <ExportRoomDialog incidentId={state.incident.id} incidentKey={state.incident.key} onClose={() => setExportOpen(false)} />}
         {me.isGuest && (
           <div className="guest-banner">
             You’re a <strong>guest</strong> in {state.incident.key}. You see only what you were invited to; your access ends at{' '}

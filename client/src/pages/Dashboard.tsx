@@ -5,6 +5,7 @@ import { useApp } from '../lib/app';
 import { getSocket } from '../lib/socket';
 import { duration } from '../lib/format';
 import { Icons, Modal, SeverityBadge, StatusPill } from '../components/ui';
+import { ImportRoomDialog, QuickBanner } from '../components/Archive';
 import type { IncidentListItem, Severity } from '../types';
 
 export function Dashboard() {
@@ -18,6 +19,7 @@ function DashboardInner() {
   const [filter, setFilter] = useState<'active' | 'resolved' | 'all'>('active');
   const [incidents, setIncidents] = useState<IncidentListItem[] | null>(null);
   const [declaring, setDeclaring] = useState(false);
+  const [restoring, setRestoring] = useState(false);
   const [, setTick] = useState(0);
 
   const load = useCallback(() => {
@@ -62,6 +64,7 @@ function DashboardInner() {
       </header>
 
       <main className="dash-main">
+        {meta.mode === 'now' && <QuickBanner />}
         <div className="dash-toolbar">
           <h1>Incidents</h1>
           <div className="seg">
@@ -72,6 +75,11 @@ function DashboardInner() {
             ))}
           </div>
           <div className="spacer" />
+          {me.isAdmin && (
+            <button className="btn ghost" onClick={() => setRestoring(true)} title="Bring back a room exported from any War Room">
+              {Icons.download} Restore a room
+            </button>
+          )}
           <button className="btn danger" onClick={() => setDeclaring(true)}>
             {Icons.flag} Declare incident
           </button>
@@ -129,6 +137,7 @@ function DashboardInner() {
         )}
       </main>
 
+      {restoring && <ImportRoomDialog onClose={() => setRestoring(false)} />}
       {declaring && <DeclareModal templates={meta.templates} onClose={() => setDeclaring(false)} />}
     </div>
   );

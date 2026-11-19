@@ -14,4 +14,8 @@ Read **[CLAUDE.md](CLAUDE.md)** before changing code. It has the commands, the l
 
 ## Setting it up for someone
 
-To deploy: point two DNS names at the host, put them in `docker-compose.yml`, run `docker compose up -d --build`, then open the one-time setup link from `docker compose logs app` and finish in Admin → Settings. See the README's Deploy and Settings sections.
+Temporary War Room for one incident: follow `docs/WARROOM_NOW.md` (`bash warroom-now.sh up`). Permanent install: point an A record at the host, `APP_DOMAIN=… docker compose up -d` (pulls `ghcr.io/tf-anguskong/warroom`), open the one-time setup link from `docker compose logs app`, finish in Admin → Settings. See the README's Deploy section.
+
+## License
+
+PolyForm Small Business 1.0.0 (`LICENSE.md`, `COMMERCIAL.md`). Keep the `Required Notice` line with every copy, including built images.

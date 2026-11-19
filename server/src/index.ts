@@ -18,6 +18,8 @@ import { applySettings, settingsRouter } from './settings.js';
 import { notesRouter } from './notes.js';
 import { filesRouter } from './files.js';
 import { shiftsRouter } from './shifts.js';
+import { archiveRouter } from './archive-routes.js';
+import { emailLoginRouter, loginCodeRouter } from './email-login.js';
 import { announceSetupIfNeeded, setupRouter } from './setup.js';
 
 // Saved settings (Admin → Settings) go on top of the environment and defaults before anything runs.
@@ -44,6 +46,7 @@ app.use(express.json({ limit: '2mb' }));
 app.use(authRouter);
 app.use(inviteAuthRouter);
 app.use(setupRouter);
+app.use(emailLoginRouter);
 app.use('/api', api);
 app.use('/api', integrationsRouter);
 app.use('/api', requireAuth, guestsRouter);
@@ -51,6 +54,8 @@ app.use('/api', requireAuth, settingsRouter);
 app.use('/api', requireAuth, notesRouter);
 app.use('/api', requireAuth, filesRouter);
 app.use('/api', requireAuth, shiftsRouter);
+app.use('/api', requireAuth, archiveRouter);
+app.use('/api', requireAuth, loginCodeRouter);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const clientDist = resolve(process.env.CLIENT_DIST ?? join(here, '../../client/dist'));

@@ -155,6 +155,8 @@ interface InviteRow {
   code_expires_at: string | null;
   code_attempts: number;
   code_sends: string;
+  kind: 'guest' | 'member';
+  code_mode: 'email' | 'manual';
 }
 
 function inviteStatus(inv: InviteRow) {
@@ -245,31 +247,54 @@ async function requireControl(req: Request, incidentId: string) {
 
 export const guestsRouter = Router();
 
-/** Create a single-use invite. The link is returned once; only its hash is stored. */
+/** Can this person invite full responders (accounts, not guests)? Admins always; in quick mode, whoever runs the room. */
+export async function canInviteMembers(user: UserRow, incidentId: string) {
+  if (user.is_guest) return false;
+  if (isAdmin(user)) return true;
+  const { canControl } = await import('./api.js');
+  return config.mode === 'now' && canControl(user, incidentId);
+}
+
+/** Email codes can actually be delivered (SMTP, or the dev outbox while developing). */
+const canEmail = () => smtpEnabled() || mailStatus().devOutbox;
+
+/**
+ * Create a single-use invite. The link is returned once; only its hash is stored.
+ * kind 'guest': sees only what's ticked. kind 'member': becomes a full responder in this room
+ * (an account that can later sign in with an emailed code); always needs a verified email.
+ */
 guestsRouter.post(
   '/incidents/:id/invites',
   h(async (req) => {
     const inc = await requireControl(req, req.params.id);
     if (inc.status === 'resolved') throw new HttpError(400, 'This incident is resolved');
+    const kind = req.body?.kind === 'member' ? 'member' : 'guest';
     const label = str(req.body?.label, 80);
-    if (!label) throw new HttpError(400, "Enter the guest's name");
+    if (!label) throw new HttpError(400, kind === 'member' ? "Enter the person's name" : "Enter the guest's name");
+    if (kind === 'member') {
+      if (!(await canInviteMembers(req.user!, inc.id))) throw new HttpError(403, 'Only an admin can invite full responders here; invite them as a guest instead');
+    }
     const linkHours = LINK_HOURS.includes(Number(req.body?.linkHours)) ? Number(req.body.linkHours) : 24;
     const accessHours = ACCESS_HOURS.includes(Number(req.body?.accessHours)) ? Number(req.body.accessHours) : 12;
-    const scope = cleanScope(inc.id, req.body?.scope);
-    if (!scope.channels.length && !scope.voiceRooms.length && !scope.sheets.length && !scope.notes.length) {
+    const scope = kind === 'member' ? { ...EMPTY } : cleanScope(inc.id, req.body?.scope);
+    if (kind === 'guest' && !scope.channels.length && !scope.voiceRooms.length && !scope.sheets.length && !scope.notes.length) {
       throw new HttpError(400, 'Give the guest access to at least one channel, voice room, sheet or note');
     }
     const email = str(req.body?.email, 254).toLowerCase();
     if (email && !EMAIL_RE.test(email)) throw new HttpError(400, 'That email address doesn’t look right');
-    if (!email && smtpEnabled() && config.guestRequireEmail) {
+    if (kind === 'member' && !email) throw new HttpError(400, "Enter the person's email: they'll need a code sent there to join");
+    // Without email, War Room makes the code and shows it to the inviter, who passes it on another way.
+    const manual = !canEmail();
+    if (!email && !manual && config.guestRequireEmail) {
       throw new HttpError(400, "Enter the guest's email: they'll need a code sent there to join");
     }
     const token = randomBytes(32).toString('base64url');
     const id = newId();
     const ts = now();
+    const code = manual ? newCode() : null;
     q.run(
-      `INSERT INTO invites (id, incident_id, token_hash, label, org, note, scope, access_hours, created_by, created_at, expires_at, email)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO invites (id, incident_id, token_hash, label, org, note, scope, access_hours, created_by, created_at, expires_at, email, kind, code_mode, code_hash, code_expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       inc.id,
       hashToken(token),
@@ -282,6 +307,10 @@ guestsRouter.post(
       ts,
       new Date(Date.now() + linkHours * 3600_000).toISOString(),
       email || null,
+      kind,
+      manual ? 'manual' : 'email',
+      code ? hashCode(id, code) : null,
+      code ? new Date(Date.now() + linkHours * 3600_000).toISOString() : null,
     );
     const { addTimeline } = await import('./api.js');
     const org = str(req.body?.org, 80);
@@ -289,11 +318,17 @@ guestsRouter.post(
       inc.id,
       req.user!.id,
       'guest',
-      `${req.user!.display_name} created a guest invite for ${label}${org ? ` (${org})` : ''}${email ? `, verified by email to ${maskEmail(email)}` : ''}, link valid ${linkHours}h`,
+      `${req.user!.display_name} created a ${kind === 'member' ? 'responder' : 'guest'} invite for ${label}${org ? ` (${org})` : ''}${manual ? ', with a join code given to the inviter' : email ? `, verified by email to ${maskEmail(email)}` : ''}, link valid ${linkHours}h`,
     );
     logAdminAction(req.user!.id, null, 'guest_invited', `${label}${org ? ` (${org})` : ''} → INC-${String(inc.number).padStart(4, '0')}`);
     refreshIncident(inc.id);
-    return { id, url: `${config.publicUrl}/join/${token}`, expiresAt: new Date(Date.now() + linkHours * 3600_000).toISOString() };
+    return {
+      id,
+      url: `${config.publicUrl}/join/${token}`,
+      expiresAt: new Date(Date.now() + linkHours * 3600_000).toISOString(),
+      // Shown once: the inviter sends it separately from the link (phone, chat, in person).
+      code,
+    };
   }),
 );
 
@@ -318,9 +353,34 @@ guestsRouter.get(
         revokedAt: r.revoked_at,
         revokedBy: r.revoked_by,
         email: r.email,
+        kind: r.kind ?? 'guest',
+        codeMode: r.code_mode ?? 'email',
         scope: scopeSummary(inc.id, parseScope(r.scope)),
       })),
     };
+  }),
+);
+
+/**
+ * A new code for an invite, shown to whoever runs the room so they can pass it on: for a lost code,
+ * email that isn't arriving, or a guest signing back in on another device. Replaces any earlier code.
+ */
+guestsRouter.post(
+  '/invites/:id/code',
+  h(async (req) => {
+    const inv = q.get<InviteRow>('SELECT * FROM invites WHERE id = ?', req.params.id);
+    if (!inv) throw new HttpError(404, 'invite not found');
+    await requireControl(req, inv.incident_id);
+    const status = inviteStatus(inv);
+    const guest = status === 'used' ? resumableGuest(inv) : null;
+    if (status !== 'ok' && !guest) throw new HttpError(400, `This invite can’t be used any more (${status})`);
+    if (status === 'used' && inv.kind === 'member') throw new HttpError(400, 'This responder already joined; they sign in from the sign-in page (an admin can give them a sign-in code)');
+    const code = newCode();
+    const minutes = status === 'ok' ? Math.max(30, Math.round((new Date(inv.expires_at).getTime() - Date.now()) / 60000)) : 30;
+    q.run('UPDATE invites SET code_hash = ?, code_expires_at = ?, code_attempts = 0 WHERE id = ?', hashCode(inv.id, code), new Date(Date.now() + minutes * 60_000).toISOString(), inv.id);
+    const { addTimeline } = await import('./api.js');
+    addTimeline(inv.incident_id, req.user!.id, 'guest', `${req.user!.display_name} issued a new code for ${guest ? guest.display_name : `the invite for ${inv.label}`}`);
+    return { code, expiresInMinutes: minutes, forName: guest?.display_name ?? inv.label, signBackIn: Boolean(guest) };
   }),
 );
 
@@ -407,12 +467,16 @@ export function maskEmail(e: string) {
   return `${user.slice(0, 1)}${'*'.repeat(Math.max(2, Math.min(user.length - 1, 6)))}@${domain}`;
 }
 
+/** Does joining (or signing back in) with this invite need a code? */
+const needsCode = (inv: InviteRow) => inv.code_mode === 'manual' || Boolean(inv.email);
+const newCode = () => String(randomInt(0, 1_000_000)).padStart(6, '0');
+
 const codeKey = createHash('sha256').update(`guest-code:${config.sessionSecret}`).digest();
 const hashCode = (inviteId: string, code: string) => createHmac('sha256', codeKey).update(`${inviteId}:${code}`).digest('hex');
 
 /** The guest this invite created, if they can still sign back in with it. */
 function resumableGuest(inv: InviteRow) {
-  if (!inv.used_by || !inv.email || inv.revoked_at) return null;
+  if (!inv.used_by || !needsCode(inv) || inv.revoked_at) return null;
   const g = getUser(inv.used_by);
   return g && g.active && !g.deleted && guestSessionValid(g) ? g : null;
 }
@@ -437,11 +501,13 @@ function checkCode(inv: InviteRow, code: unknown): CodeCheck {
 }
 
 const CODE_ERRORS: Record<Exclude<CodeCheck, 'ok'>, string> = {
-  missing: 'Enter the code from the email',
-  expired: 'That code has expired. Send a new one.',
-  wrong: 'That code isn’t right. Check the newest email and try again.',
-  locked: 'Too many wrong codes. Send a new code.',
+  missing: 'Enter your 6-digit code',
+  expired: 'That code has expired. Get a new one.',
+  wrong: 'That code isn’t right. Check it and try again.',
+  locked: 'Too many wrong codes. Get a new code.',
 };
+const codeError = (inv: InviteRow, c: Exclude<CodeCheck, 'ok'>) =>
+  inv.code_mode === 'manual' && c !== 'missing' ? `${CODE_ERRORS[c].replace(/Get a new (one|code)\./, '')} Ask ${getUser(inv.created_by)?.display_name ?? 'the person who invited you'} for a new code.`.trim() : CODE_ERRORS[c];
 
 // ---------- public: redeem a link ----------
 
@@ -462,6 +528,7 @@ inviteAuthRouter.get('/auth/invite/:token', (req, res) => {
   const inc = q.get<{ number: number; title: string; severity: string }>('SELECT number, title, severity FROM incidents WHERE id = ?', inv.incident_id)!;
   res.json({
     status: resume ? 'resume' : status,
+    kind: inv.kind ?? 'guest',
     incidentKey: `INC-${String(inc.number).padStart(4, '0')}`,
     incidentTitle: inc.title,
     severity: inc.severity,
@@ -472,9 +539,10 @@ inviteAuthRouter.get('/auth/invite/:token', (req, res) => {
     accessHours: inv.access_hours,
     accessEndsAt: resume?.guest_expires_at ?? null,
     linkExpiresAt: inv.expires_at,
-    requiresCode: Boolean(inv.email),
+    requiresCode: needsCode(inv),
+    codeDelivery: inv.code_mode === 'manual' ? 'manual' : 'email',
     email: inv.email ? maskEmail(inv.email) : null,
-    devOutbox: Boolean(inv.email) && mailStatus().devOutbox,
+    devOutbox: inv.code_mode !== 'manual' && Boolean(inv.email) && mailStatus().devOutbox,
     scope: scopeSummary(inv.incident_id, parseScope(resume ? resume.guest_scope : inv.scope)),
   });
 });
@@ -485,7 +553,10 @@ inviteAuthRouter.get('/auth/invite/:token', (req, res) => {
  */
 inviteAuthRouter.post('/auth/invite/:token/code', async (req, res) => {
   const inv = findInvite(req.params.token);
-  if (!inv || !inv.email) return res.status(404).json({ error: 'This link is not valid' });
+  if (!inv || !needsCode(inv)) return res.status(404).json({ error: 'This link is not valid' });
+  if (inv.code_mode === 'manual' || !inv.email) {
+    return res.status(400).json({ error: `This War Room doesn’t send email. Ask ${getUser(inv.created_by)?.display_name ?? 'the person who invited you'} for your code.` });
+  }
   const status = inviteStatus(inv);
   if (status !== 'ok' && !(status === 'used' && resumableGuest(inv))) {
     return res.status(410).json({ error: `This link can’t be used (${status})`, status });
@@ -525,11 +596,12 @@ inviteAuthRouter.post('/auth/invite/:token/accept', async (req, res) => {
   if (!inv) return res.status(404).json({ error: 'This link is not valid' });
   const status = inviteStatus(inv);
   if (status !== 'ok') return res.status(410).json({ error: `This link can’t be used (${status})`, status });
-  if (inv.email) {
+  if (needsCode(inv)) {
     const c = checkCode(inv, req.body?.code);
-    if (c !== 'ok') return res.status(c === 'missing' ? 400 : 401).json({ error: CODE_ERRORS[c], code: c });
+    if (c !== 'ok') return res.status(c === 'missing' ? 400 : 401).json({ error: codeError(inv, c), code: c });
   }
   const displayName = str(req.body?.displayName, 80) || inv.label;
+  if (inv.kind === 'member') return acceptMember(req, res, inv, displayName);
   const ts = now();
   const expiresAt = new Date(Date.now() + inv.access_hours * 3600_000).toISOString();
   let guest: UserRow | null = null;
@@ -574,16 +646,54 @@ inviteAuthRouter.post('/auth/invite/:token/accept', async (req, res) => {
   res.json({ incidentId: inv.incident_id });
 });
 
+/**
+ * A responder invite: find or create the account for the verified email, add them to the room as a
+ * full member, and sign them in. Later they sign in with an emailed code from the sign-in page.
+ */
+async function acceptMember(req: Request, res: Response, inv: InviteRow, displayName: string) {
+  const email = inv.email!;
+  const ts = now();
+  let user: UserRow | null = null;
+  let problem: string | null = null;
+  let created = false;
+  tx(() => {
+    const r = q.run('UPDATE invites SET used_at = ?, used_ip = ? WHERE id = ? AND used_at IS NULL AND revoked_at IS NULL AND expires_at > ?', ts, req.ip ?? null, inv.id, ts);
+    if (r.changes !== 1) return;
+    const existing = q.get<UserRow>('SELECT * FROM users WHERE is_guest = 0 AND deleted = 0 AND (email = ? COLLATE NOCASE OR user_name = ? COLLATE NOCASE)', email, email);
+    if (existing && !existing.active) {
+      problem = 'Your account is deactivated. Ask an admin to reactivate it.';
+      return;
+    }
+    user = existing ?? createUser({ userName: email, email, displayName });
+    created = !existing;
+    q.run('UPDATE invites SET used_by = ? WHERE id = ?', user.id, inv.id);
+    q.run('INSERT OR IGNORE INTO incident_members (incident_id, user_id, joined_at) VALUES (?, ?, ?)', inv.incident_id, user.id, ts);
+  });
+  if (problem) return res.status(403).json({ error: problem });
+  if (!user) return res.status(410).json({ error: 'This link has already been used', status: 'used' });
+  const u = getUser((user as UserRow).id)!;
+  const { addTimeline, systemNotice } = await import('./api.js');
+  const { startSession } = await import('./auth.js');
+  const inviter = getUser(inv.created_by)?.display_name ?? 'someone';
+  const how = inv.code_mode === 'manual' ? 'code from the inviter' : `email verified (${maskEmail(email)})`;
+  addTimeline(inv.incident_id, u.id, 'joined', `${u.display_name} joined as a responder using an invite from ${inviter}, ${how}`);
+  systemNotice(inv.incident_id, `**${u.display_name}** joined as a responder (invited by ${inviter}, ${inv.code_mode === 'manual' ? 'with a code from them' : 'email verified'})`);
+  logAdminAction(inv.created_by, u.id, created ? 'member_invited_joined' : 'member_invite_used', `${u.display_name} <${maskEmail(email)}>`);
+  await startSession(res, u);
+  refreshIncident(inv.incident_id);
+  res.json({ incidentId: inv.incident_id });
+}
+
 /** Sign a guest back in (new device, cleared cookies) with the same link plus a fresh email code. */
 inviteAuthRouter.post('/auth/invite/:token/resume', async (req, res) => {
   const inv = findInvite(req.params.token);
   const g = inv && inviteStatus(inv) === 'used' ? resumableGuest(inv) : null;
   if (!inv || !g) return res.status(410).json({ error: 'This guest access has ended' });
   const c = checkCode(inv, req.body?.code);
-  if (c !== 'ok') return res.status(c === 'missing' ? 400 : 401).json({ error: CODE_ERRORS[c], code: c });
+  if (c !== 'ok') return res.status(c === 'missing' ? 400 : 401).json({ error: codeError(inv, c), code: c });
   const { addTimeline } = await import('./api.js');
   const { startGuestSession } = await import('./auth.js');
-  addTimeline(inv.incident_id, g.id, 'guest', `${g.display_name} signed back in as a guest (email code to ${maskEmail(inv.email!)})`);
+  addTimeline(inv.incident_id, g.id, 'guest', `${g.display_name} signed back in as a guest (${inv.email && inv.code_mode !== 'manual' ? `email code to ${maskEmail(inv.email)}` : 'code from the inviter'})`);
   const ttl = Math.max(60, Math.floor((new Date(g.guest_expires_at!).getTime() - Date.now()) / 1000));
   await startGuestSession(res, g, ttl);
   res.json({ incidentId: inv.incident_id });

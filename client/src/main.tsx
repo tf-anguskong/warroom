@@ -8,6 +8,7 @@ import { Setup } from './pages/Setup';
 import { Dashboard } from './pages/Dashboard';
 import { IncidentRoom } from './pages/IncidentRoom';
 import { Admin } from './pages/Admin';
+import { Start } from './pages/Start';
 import './styles.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -25,6 +26,7 @@ createRoot(document.getElementById('root')!).render(
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/incidents/:id" element={<IncidentRoom />} />
                 <Route path="/admin" element={<Admin />} />
+                <Route path="/start" element={<Start />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </AppProvider>

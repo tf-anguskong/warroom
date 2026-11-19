@@ -4299,3 +4299,97 @@ tr.alert-detail .codeblock {
     grid-template-columns: 110px minmax(0, 1fr);
   }
 }
+
+/* ---------- Quick War Room, archives, codes ---------- */
+.quick-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 6px 16px;
+  font-size: 13px;
+  background: color-mix(in srgb, var(--warn) 14%, var(--bg-elev));
+  border-bottom: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+}
+.quick-banner span {
+  flex: 1;
+  min-width: 240px;
+}
+.dash-main > .quick-banner {
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  margin-bottom: 12px;
+}
+.invite-code {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+.code-big {
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: 6px;
+}
+.kind-seg {
+  align-self: flex-start;
+}
+.hash-full {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  background: var(--bg-elev2);
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+.import-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+}
+.start-page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 40px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.start-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.start-head h1 {
+  margin: 0 0 4px;
+  font-size: 24px;
+}
+.start-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+.start-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.start-card h2 {
+  margin: 0;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.start-page > .btn {
+  align-self: flex-start;
+}

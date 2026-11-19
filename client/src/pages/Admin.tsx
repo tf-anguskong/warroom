@@ -73,6 +73,7 @@ export function Admin() {
   const [search, setSearch] = useState('');
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [busy, setBusy] = useState(false);
+  const [loginCode, setLoginCode] = useState<{ code: string; name: string; email: string } | null>(null);
   const [params, setParams] = useSearchParams();
   const t = params.get('tab');
   const tab = t === 'integrations' || t === 'settings' ? t : 'people';
@@ -245,6 +246,20 @@ export function Admin() {
                                 Managed in {u.idpLabel}
                               </span>
                             ))}
+                          {u.active && !u.ssoLinked && u.email && !u.scimManaged && (
+                            <button
+                              className="btn ghost sm"
+                              title="A one-time code they enter on the sign-in page (for when email isn't set up or isn't arriving)"
+                              onClick={() =>
+                                api
+                                  .post<{ code: string; email: string }>(`/api/admin/users/${u.id}/login-code`)
+                                  .then((r) => setLoginCode({ code: r.code, email: r.email, name: u.displayName }))
+                                  .catch((e) => toast({ text: e instanceof ApiError ? e.message : 'Could not make a code', tone: 'error' }, 6000))
+                              }
+                            >
+                              Sign-in code
+                            </button>
+                          )}
                           {!u.scimManaged && u.id !== me.id && (
                             <button
                               className={`btn ghost sm ${u.active ? 'danger-text' : ''}`}
@@ -310,6 +325,17 @@ export function Admin() {
         )}
       </main>
 
+      {loginCode && (
+        <Modal title={`Sign-in code for ${loginCode.name}`} onClose={() => setLoginCode(null)} footer={<button className="btn primary" onClick={() => setLoginCode(null)}>Done</button>}>
+          <div className="invite-code">
+            <div className="code-big mono">{loginCode.code.replace(/(\d{3})(\d{3})/, '$1 $2')}</div>
+            <div className="small">
+              Give this to {loginCode.name} directly. On the sign-in page they choose <strong>I already have a code</strong>, enter <strong>{loginCode.email}</strong> and this
+              code. It works once, for 15 minutes, and replaces any earlier code.
+            </div>
+          </div>
+        </Modal>
+      )}
       {confirm && (
         <Modal
           title={CONFIRM_TEXT[confirm.kind].title(confirm.user.displayName)}

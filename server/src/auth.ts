@@ -7,6 +7,7 @@ import { createUser, findUserByLogin, getUser, toPublic, logAdminAction, updateU
 import { now, q } from './db.js';
 import { guestAllowed, guestSessionValid } from './guests.js';
 import { onSettingsChanged } from './settings.js';
+import { emailCanSend, emailLoginEnabled } from './email-login.js';
 import { getProvider, resolveSsoUser, ssoProviders, type ProviderId, type SsoIdentity, type SsoProvider } from './sso.js';
 
 const SESSION_COOKIE = 'wr_session';
@@ -259,7 +260,7 @@ export const authRouter = Router();
 
 authRouter.get('/auth/config', (_req, res) => {
   const providers = ssoProviders().map((p) => ({ id: p.id, label: p.label, protocol: p.protocol }));
-  res.json({ sso: providers.length > 0, providers, devAuth: config.devAuth });
+  res.json({ sso: providers.length > 0, providers, devAuth: config.devAuth, emailLogin: emailLoginEnabled(), emailCanSend: emailCanSend(), mode: config.mode });
 });
 
 /** Start SSO. `?provider=okta|entra`; defaults to the first configured provider. */

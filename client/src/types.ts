@@ -212,6 +212,8 @@ export interface Meta {
   templates: { key: string; name: string; description: string }[];
   /** Email codes for guest invites: available, mandatory, or going to the dev outbox (no SMTP). */
   guestEmail: { enabled: boolean; required: boolean; dev: boolean };
+  /** 'now' = temporary quick War Room. */
+  mode?: 'now' | 'standard';
 }
 
 export type View =

@@ -316,6 +316,8 @@ api.get(
       statuses: STATUSES,
       templates: SHEET_TEMPLATES,
       guestEmail: { enabled: m.configured || m.devOutbox, required: m.requireEmail, dev: m.devOutbox },
+      /** 'now' = temporary quick War Room: export before teardown, invite responders by email. */
+      mode: config.mode,
     };
   }),
 );

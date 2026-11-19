@@ -33,6 +33,8 @@ server/src/
   api.ts          incidents, channels, messages, voice, roles, assignments, sheets, export, admin
   notes.ts        Markdown notes; saves carry the version they started from (409 on conflict)
   files.ts        uploads to DATA_DIR/files with SHA-256; downloads; Files view API
+  archive.ts      room export/import (.warroom: tar.gz + manifest, optional AES-256-GCM); archive-routes.ts, room-cli.ts
+  email-login.ts  sign-in with emailed or admin-issued codes for accounts without SSO
   shifts.ts       shift schedule; a 30 s ticker sends reminders and start/end notices (flags on each row so each fires once)
   guests.ts       guest invites, scopes, deny-by-default route allowlist, email codes, sweeper
   mail.ts         nodemailer transport (TLS required), dev outbox
@@ -99,6 +101,12 @@ docs/CLAUDE_DESIGN_PROMPT.md   design brief for Claude Design; update it when sc
 - The Vite dev server proxies `/api`, `/auth`, `/scim` and `/socket.io` to `:3000`. Pages that call the API must use those prefixes.
 - Voice features (mute, move, remove) call LiveKit's server API at `config.livekit.apiUrl`; with `npm run livekit:dev` that's `http://localhost:7880`.
 - In Docker, War Room writes the LiveKit key pair to `LIVEKIT_KEY_FILE` on the shared `livekit-keys` volume, and LiveKit starts after the app is healthy.
+
+**Quick mode and archives.**
+- `WARROOM_MODE=now` (config.mode) is the temporary-instance mode used by `warroom-now.sh`: email sign-in on, responder invites by whoever runs the room, export banner.
+- Every invite needs a code when it can (`needsCode`): emailed if SMTP works, otherwise shown once to the inviter (`code_mode = 'manual'`).
+- New tables that belong to a room must be added to `SPECS` in `archive.ts` (with ID columns marked) or they won't survive export/import. Bump `VERSION` for incompatible format changes.
+- Shell files must keep LF line endings (`.gitattributes`).
 
 ## Don't
 

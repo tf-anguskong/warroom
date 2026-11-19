@@ -8,6 +8,8 @@ COPY . .
 RUN npm run build && npm prune --omit=dev
 
 FROM node:24-alpine
+LABEL org.opencontainers.image.source=https://github.com/tf-anguskong/warroom \
+      org.opencontainers.image.licenses=LicenseRef-PolyForm-Small-Business-1.0.0
 ENV NODE_ENV=production \
     PORT=3000 \
     DATA_DIR=/data \
@@ -17,6 +19,8 @@ COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/server/package.json ./server/
 COPY --from=build /app/server/dist ./server/dist
 COPY --from=build /app/client/dist ./client/dist
+# The license and its Required Notice travel with every copy of the image.
+COPY LICENSE.md COMMERCIAL.md ./
 RUN mkdir -p /data /keys && chown node:node /data /keys
 USER node
 VOLUME /data

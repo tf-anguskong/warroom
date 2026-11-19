@@ -5,11 +5,13 @@ import { useApp } from '../lib/app';
 import { duration, STATUS_LABEL, utcTime } from '../lib/format';
 import type { IncidentState, Severity, Status } from '../types';
 import { Icons, SeverityBadge } from './ui';
+import { ExportRoomDialog } from './Archive';
 
 export function RoomHeader({ state }: { state: IncidentState }) {
   const { meta, toast, userById, me } = useApp();
   const inc = state.incident;
   const [now, setNow] = useState(Date.now());
+  const [exporting, setExporting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(inc.title);
 
@@ -118,6 +120,12 @@ export function RoomHeader({ state }: { state: IncidentState }) {
       <button className="icon-btn" onClick={copyLink} title="Copy war room link" aria-label="Copy war room link">
         {Icons.link}
       </button>
+      {!me.isGuest && (state.canControl || me.isAdmin) && (
+        <button className="btn ghost sm" onClick={() => setExporting(true)} title="Export the whole room to an archive you can restore on any War Room">
+          {Icons.download} Export room
+        </button>
+      )}
+      {exporting && <ExportRoomDialog incidentId={inc.id} incidentKey={inc.key} onClose={() => setExporting(false)} />}
       {!me.isGuest && <a className="btn ghost sm" href={`/api/incidents/${inc.id}/export.md`} title="Download postmortem draft (Markdown)">
         {Icons.download} Postmortem
       </a>}

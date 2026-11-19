@@ -17,6 +17,8 @@ interface InviteInfo {
   accessEndsAt?: string | null;
   linkExpiresAt?: string;
   requiresCode?: boolean;
+  codeDelivery?: 'email' | 'manual';
+  kind?: 'guest' | 'member';
   email?: string | null;
   devOutbox?: boolean;
   scope?: GuestScopeSummary & { incidentId: string };
@@ -102,6 +104,9 @@ export function Join() {
   const s = info?.scope;
   const alreadyMember = me && !me.isGuest;
   const needsCode = Boolean(info?.requiresCode);
+  // No email on this War Room: the inviter gave the person the code, so ask for it straight away.
+  const manual = info?.codeDelivery === 'manual';
+  const member = info?.kind === 'member';
   const canSubmit = !busy && (resume || name.trim()) && (!needsCode || code.replace(/\D/g, '').length === 6);
 
   return (
@@ -111,7 +116,7 @@ export function Join() {
           <span className="brand-mark" aria-hidden />
           <div>
             <h1>War Room</h1>
-            <p className="muted">{resume ? 'Guest sign-in' : 'Guest invitation'}</p>
+            <p className="muted">{resume ? 'Guest sign-in' : member ? 'Invitation to the response team' : 'Guest invitation'}</p>
           </div>
         </div>
 
@@ -146,8 +151,11 @@ export function Join() {
               <>
                 <p className="small">
                   <strong>{info.invitedBy}</strong> invited {info.label}
-                  {info.org ? ` (${info.org})` : ''} to help with this incident{info.note ? `: ${info.note}` : '.'}
+                  {info.org ? ` (${info.org})` : ''} {member ? 'to join the response team for' : 'to help with'} this incident{info.note ? `: ${info.note}` : '.'}
                 </p>
+                {member ? (
+                  <p className="small muted">You’ll see the whole war room and can take on roles and tasks. Afterwards you can sign back in from the sign-in page with a code.</p>
+                ) : (
                 <div className="join-scope">
                   <div className="muted small">You’ll be able to see</div>
                   <ul>
@@ -158,6 +166,7 @@ export function Join() {
                     {s?.timeline && <li>🕑 Incident timeline</li>}
                   </ul>
                 </div>
+                )}
                 <label>
                   Your name, as others will see it
                   <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} />
@@ -167,7 +176,24 @@ export function Join() {
 
             {needsCode && (
               <div className="code-step">
-                {!sent ? (
+                {manual ? (
+                  <>
+                    <div className="small">
+                      Enter the 6-digit code <strong>{info.invitedBy}</strong> gave you{resume ? ' to sign back in' : ''}. (It’s sent separately from this link.)
+                    </div>
+                    <input
+                      ref={codeBox}
+                      className="code-input mono"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      placeholder="123456"
+                      maxLength={7}
+                      value={code}
+                      onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, ''))}
+                      aria-label="Code from the person who invited you"
+                    />
+                  </>
+                ) : !sent ? (
                   <>
                     <div className="small">
                       To {resume ? 'sign in' : 'join'}, we’ll email a 6-digit code to <strong>{info.email}</strong>.
@@ -202,15 +228,17 @@ export function Join() {
             )}
 
             {err && <div className="alert error">{err}</div>}
-            {(!needsCode || sent) && (
+            {(!needsCode || sent || manual) && (
               <button className="btn primary lg block" disabled={!canSubmit}>
-                {resume ? 'Sign in' : 'Join as guest'}
+                {resume ? 'Sign in' : member ? 'Join the team' : 'Join as guest'}
               </button>
             )}
             <p className="hint">
               {resume
                 ? 'Each code works once. Requesting a new code cancels the previous one.'
-                : `This link works once. Your access lasts ${info.accessHours} hours and ends early if the incident is resolved or the Incident Commander ends it. Everyone in the room will see that you are a guest.`}
+                : member
+                  ? 'This link works once.'
+                  : `This link works once. Your access lasts ${info.accessHours} hours and ends early if the incident is resolved or the Incident Commander ends it. Everyone in the room will see that you are a guest.`}
             </p>
           </form>
         )}

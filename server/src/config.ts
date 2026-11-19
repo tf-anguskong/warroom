@@ -36,6 +36,13 @@ const sessionSecret = env.SESSION_SECRET || keyFile('.session-secret', '.dev-ses
 
 export const config = {
   production,
+  /**
+   * 'now' = a temporary War Room stood up for one incident and torn down after (docker compose
+   * with WARROOM_MODE=now): no identity provider needed, people come in through email invites.
+   */
+  mode: (env.WARROOM_MODE ?? '').toLowerCase() === 'now' ? ('now' as const) : ('standard' as const),
+  /** Pre-fills the first admin's email on the setup page (quick mode). */
+  adminEmail: (env.WARROOM_ADMIN_EMAIL ?? '').trim().toLowerCase(),
   // `--port N` (used by `npm run dev`) wins over PORT so a dev tool's PORT can't collide with Vite.
   port: Number(process.argv.find((_, i, a) => a[i - 1] === '--port') ?? env.PORT ?? 3000),
   publicUrl,
@@ -95,6 +102,8 @@ export const config = {
   },
   /** When email is configured, every guest invite needs an email and a code to join (default on). */
   guestRequireEmail: bool(env.GUEST_REQUIRE_EMAIL, true),
+  /** People without SSO sign in with a code emailed to them. On by default in quick mode. */
+  emailLogin: bool(env.EMAIL_LOGIN, (env.WARROOM_MODE ?? '').toLowerCase() === 'now'),
   /** Uploaded files and screenshots (stored in DATA_DIR/files). */
   files: { maxMb: Number(env.MAX_UPLOAD_MB ?? 100) },
   livekit: {

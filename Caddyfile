@@ -1,7 +1,9 @@
 {$APP_DOMAIN} {
-	reverse_proxy app:3000
-}
-
-{$LIVEKIT_DOMAIN} {
-	reverse_proxy livekit:7880
+	# LiveKit signalling for voice and screen share
+	handle /rtc* {
+		reverse_proxy livekit:7880
+	}
+	handle {
+		reverse_proxy app:3000
+	}
 }

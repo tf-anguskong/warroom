@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { config } from './config.js';
+import { config, smtpEnabled } from './config.js';
 import { now, q } from './db.js';
 import { startSession } from './auth.js';
 import { isSaved, saveSetting } from './settings.js';
@@ -31,6 +31,9 @@ setupRouter.get('/auth/setup/:token', (req, res) => {
     purpose: t.purpose,
     admins: adminCount(),
     publicUrl: config.publicUrl,
+    mode: config.mode,
+    suggestedEmail: config.adminEmail || null,
+    emailReady: smtpEnabled(),
     // Ask for the address only while nobody has set it.
     askPublicUrl: !isSaved('publicUrl') && !publicUrlFromEnv(),
   });
@@ -73,7 +76,8 @@ setupRouter.post('/auth/setup/:token', async (req, res) => {
   if (publicUrl) saveSetting('publicUrl', publicUrl, user.id);
 
   await startSession(res, user);
-  res.json({ redirect: '/admin?tab=settings' });
+  // Quick mode: straight on to starting or restoring a room; otherwise finish configuring.
+  res.json({ redirect: config.mode === 'now' ? '/start' : '/admin?tab=settings' });
 });
 
 /** At startup: with no admins yet, print a setup link so the first one can get in. */

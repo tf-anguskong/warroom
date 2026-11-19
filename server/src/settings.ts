@@ -79,6 +79,12 @@ export const FIELDS: Field[] = [
     base: () => envDefaults.bootstrapAdmins, apply: (v) => (config.bootstrapAdmins = (v as string[]).map((s) => s.toLowerCase())),
   },
   {
+    key: 'emailLogin', section: 'general', kind: 'bool', env: ['EMAIL_LOGIN'],
+    label: 'Sign in with an emailed code',
+    help: 'People with a War Room account that isn’t linked to Okta or Entra (for example responders invited by email) sign in with a one-time code sent to their email. Needs email set up.',
+    base: () => envDefaults.emailLogin, apply: (v) => (config.emailLogin = Boolean(v)),
+  },
+  {
     key: 'files.maxMb', section: 'general', kind: 'number', min: 1, max: 4096, env: ['MAX_UPLOAD_MB'],
     label: 'Largest file upload (MB)', help: 'Screenshots, logs and evidence attached in a war room. Files are stored in the data directory.',
     base: () => envDefaults.files.maxMb, apply: (v) => (config.files.maxMb = v),

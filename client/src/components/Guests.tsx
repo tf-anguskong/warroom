@@ -63,7 +63,11 @@ function ScopePicker({ state, scope, onChange }: { state: IncidentState; scope: 
 }
 
 function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () => void }) {
-  const { toast, meta } = useApp();
+  const { toast, meta, me } = useApp();
+  // Full responders (accounts) can be invited by admins, and in a quick War Room by whoever runs the room.
+  const canInviteMembers = me.isAdmin || (meta.mode === 'now' && state.canControl);
+  const [kind, setKind] = useState<'member' | 'guest'>(canInviteMembers && meta.mode === 'now' ? 'member' : 'guest');
+  const member = kind === 'member';
   const [email, setEmail] = useState('');
   const main = state.voiceRooms.find((v) => v.kind === 'main');
   const general = state.channels.find((c) => c.name === 'general') ?? state.channels[0];
@@ -73,14 +77,25 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
   const [linkHours, setLinkHours] = useState(24);
   const [accessHours, setAccessHours] = useState(12);
   const [scope, setScope] = useState<Scope>({ channels: general ? [general.id] : [], voiceRooms: main ? [main.id] : [], sheets: [], notes: [], timeline: false });
-  const [created, setCreated] = useState<{ url: string; expiresAt: string } | null>(null);
+  const [created, setCreated] = useState<{ url: string; expiresAt: string; code: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
-      setCreated(await api.post<{ url: string; expiresAt: string }>(`/api/incidents/${state.incident.id}/invites`, { label, org, note, linkHours, accessHours, scope, email: email.trim() }));
+      setCreated(
+        await api.post<{ url: string; expiresAt: string; code: string | null }>(`/api/incidents/${state.incident.id}/invites`, {
+          kind,
+          label,
+          org,
+          note,
+          linkHours,
+          accessHours,
+          scope,
+          email: email.trim(),
+        }),
+      );
     } catch (err) {
       toast({ text: err instanceof Error ? err.message : 'Could not create the invite', tone: 'error' });
     } finally {
@@ -94,7 +109,7 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
         <div className="form">
           <div className="alert warn">
             <div>
-            Copy it now: the link is shown only once.{email.trim() && <> Joining also needs a code we email to <strong>{email.trim()}</strong>, so the link alone isn’t enough.</>} It works <strong>one time</strong>, until {new Date(created.expiresAt).toUTCString().slice(17, 22)} UTC{' '}
+            Copy it now: the link is shown only once.{created.code ? <> Joining also needs the <strong>code below</strong>, so the link alone isn’t enough.</> : email.trim() && <> Joining also needs a code we email to <strong>{email.trim()}</strong>, so the link alone isn’t enough.</>} It works <strong>one time</strong>, until {new Date(created.expiresAt).toUTCString().slice(17, 22)} UTC{' '}
             {new Date(created.expiresAt).toDateString() !== new Date().toDateString() ? `on ${created.expiresAt.slice(0, 10)}` : 'today'}. Whoever opens it first gets in, so send it
             directly to {label}.
             </div>
@@ -111,6 +126,17 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
               Copy
             </button>
           </div>
+          {created.code && (
+            <div className="invite-code">
+              <div className="muted small">Join code for {label}</div>
+              <div className="code-big mono">{created.code.replace(/(\d{3})(\d{3})/, '$1 $2')}</div>
+              <div className="small">
+                This War Room can’t send email, so <strong>you</strong> give {label} this code. Send it a different way from the link (for example the link by
+                email and the code by text message or a call), so someone who only sees one of them can’t get in. It works until the link expires; 5 wrong tries
+                lock it. Lost it? Use <strong>New code</strong> next to the invite.
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
     );
@@ -119,27 +145,42 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
   const nothing = !scope.channels.length && !scope.voiceRooms.length && !scope.sheets.length && !scope.notes.length;
   return (
     <Modal
-      title="Invite a guest"
+      title={member ? 'Invite a responder' : 'Invite a guest'}
       onClose={onClose}
       footer={
         <>
           <button className="btn ghost" onClick={onClose}>
             Cancel
           </button>
-          <button className="btn primary" form="invite" disabled={busy || !label.trim() || nothing || (meta.guestEmail.required && !email.trim())}>
+          <button
+            className="btn primary"
+            form="invite"
+            disabled={busy || !label.trim() || (!member && nothing) || (member && !email.trim()) || (!member && meta.guestEmail.required && !email.trim())}
+          >
             Create single-use link
           </button>
         </>
       }
     >
       <form id="invite" className="form" onSubmit={submit}>
+        {canInviteMembers && (
+          <div className="seg kind-seg" role="radiogroup" aria-label="Invite as">
+            <button type="button" className={member ? 'on' : ''} onClick={() => setKind('member')}>
+              Responder
+            </button>
+            <button type="button" className={!member ? 'on' : ''} onClick={() => setKind('guest')}>
+              Guest
+            </button>
+          </div>
+        )}
         <p className="muted small">
-          For people outside {`your identity provider`}: vendors, outside IR firms, counsel. They see only what you tick below, and everyone in the room sees they’re a
-          guest.
+          {member
+            ? 'A full member of the response team: sees the whole room, can take roles and tasks, and can sign back in later with a code. Use for your own people.'
+            : 'For people outside your team: vendors, outside IR firms, counsel. They see only what you tick below, their access ends on its own, and everyone in the room sees they’re a guest.'}
         </p>
         <div className="row2">
           <label>
-            Guest name
+            {member ? 'Name' : 'Guest name'}
             <input autoFocus value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Dana Kim" maxLength={80} />
           </label>
           <label>
@@ -147,9 +188,15 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
             <input value={org} onChange={(e) => setOrg(e.target.value)} placeholder="Outside IR firm" maxLength={80} />
           </label>
         </div>
-        {meta.guestEmail.enabled ? (
+        {member && !meta.guestEmail.enabled ? (
           <label>
-            Guest email {meta.guestEmail.required ? '' : <span className="muted">(recommended)</span>}
+            Email
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="dana@company.com" maxLength={254} />
+            <span className="muted small">Their account name. This War Room can’t send email, so you’ll get a join code to give them.</span>
+          </label>
+        ) : meta.guestEmail.enabled ? (
+          <label>
+            {member ? 'Email' : 'Guest email'} {meta.guestEmail.required || member ? '' : <span className="muted">(recommended)</span>}
             <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="dana@outside-ir.example" maxLength={254} />
             <span className="muted small">
               When they open the link we email a one-time code to this address; they need it to join or to sign back in.
@@ -158,15 +205,19 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
           </label>
         ) : (
           <div className="alert info small">
-            <div>Email verification is off because no SMTP server is configured, so anyone holding the link can join. An admin can set up email under Admin → Settings → Email to require an emailed code.</div>
+            <div>This War Room can’t send email, so you’ll get a 6-digit join code with the link. Give it to the guest a different way from the link. (An admin can set up email under Admin → Settings → Email.)</div>
           </div>
         )}
         <label>
           Why they’re joining
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Malware reverse engineering support" maxLength={300} />
         </label>
-        <div className="muted small">They can see</div>
-        <ScopePicker state={state} scope={scope} onChange={setScope} />
+        {!member && (
+          <>
+            <div className="muted small">They can see</div>
+            <ScopePicker state={state} scope={scope} onChange={setScope} />
+          </>
+        )}
         <div className="row2">
           <label>
             Link works for
@@ -178,7 +229,7 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
               ))}
             </select>
           </label>
-          <label>
+          {!member && <label>
             Access lasts
             <select value={accessHours} onChange={(e) => setAccessHours(Number(e.target.value))}>
               {[2, 4, 8, 12, 24, 72].map((h) => (
@@ -187,9 +238,9 @@ function InviteDialog({ state, onClose }: { state: IncidentState; onClose: () =>
                 </option>
               ))}
             </select>
-          </label>
+          </label>}
         </div>
-        {nothing && <div className="warn-text small">Tick at least one channel, voice room, sheet or note.</div>}
+        {!member && nothing && <div className="warn-text small">Tick at least one channel, voice room, sheet or note.</div>}
       </form>
     </Modal>
   );
@@ -240,6 +291,23 @@ interface Invite {
   expiresAt: string;
   usedBy: string | null;
   email: string | null;
+  kind?: 'guest' | 'member';
+  codeMode?: 'email' | 'manual';
+}
+
+/** Shows a code the inviter passes on themselves (no email, lost code, or signing back in). */
+function CodeDialog({ info, onClose }: { info: { code: string; forName: string; expiresInMinutes: number; signBackIn: boolean }; onClose: () => void }) {
+  return (
+    <Modal title={`Code for ${info.forName}`} onClose={onClose} footer={<button className="btn primary" onClick={onClose}>Done</button>}>
+      <div className="invite-code">
+        <div className="code-big mono">{info.code.replace(/(\d{3})(\d{3})/, '$1 $2')}</div>
+        <div className="small">
+          Give this to {info.forName} directly (call, text, chat). {info.signBackIn ? 'They open their original invite link and enter it to sign back in.' : 'They enter it after opening their invite link.'}{' '}
+          It replaces any earlier code and works for {info.expiresInMinutes >= 120 ? `${Math.round(info.expiresInMinutes / 60)} hours` : `${info.expiresInMinutes} minutes`}.
+        </div>
+      </div>
+    </Modal>
+  );
 }
 
 const hhmm = (iso: string | null) => (iso ? `${iso.slice(11, 16)} UTC` : '');
@@ -248,8 +316,16 @@ const hhmm = (iso: string | null) => (iso ? `${iso.slice(11, 16)} UTC` : '');
 export function GuestsSection({ state }: { state: IncidentState }) {
   const { userById, toast } = useApp();
   const [invites, setInvites] = useState<Invite[]>([]);
+  const { me, meta } = useApp();
   const [dialog, setDialog] = useState<null | 'invite' | { access: Guest }>(null);
+  const [codeInfo, setCodeInfo] = useState<{ code: string; forName: string; expiresInMinutes: number; signBackIn: boolean } | null>(null);
   const manage = state.canControl;
+  const canInviteMembers = me.isAdmin || (meta.mode === 'now' && manage);
+  const newCode = (inviteId: string) =>
+    api
+      .post<{ code: string; forName: string; expiresInMinutes: number; signBackIn: boolean }>(`/api/invites/${inviteId}/code`)
+      .then(setCodeInfo)
+      .catch((e) => toast({ text: e.message, tone: 'error' }, 6000));
 
   const load = useCallback(() => {
     if (manage) api.get<{ invites: Invite[] }>(`/api/incidents/${state.incident.id}/invites`).then((r) => setInvites(r.invites)).catch(() => undefined);
@@ -280,7 +356,7 @@ export function GuestsSection({ state }: { state: IncidentState }) {
         </h3>
         {manage && state.incident.status !== 'resolved' && (
           <button className="btn ghost sm" onClick={() => setDialog('invite')}>
-            {Icons.link} Invite guest
+            {Icons.link} {canInviteMembers ? 'Invite' : 'Invite guest'}
           </button>
         )}
       </div>
@@ -308,6 +384,11 @@ export function GuestsSection({ state }: { state: IncidentState }) {
                 <button className="btn ghost sm" onClick={() => setDialog({ access: g })}>
                   Change access
                 </button>
+                {invites.some((i) => i.usedBy === g.id) && (
+                  <button className="btn ghost sm" title="A code they can use with their invite link to sign back in" onClick={() => newCode(invites.find((i) => i.usedBy === g.id)!.id)}>
+                    Sign-in code
+                  </button>
+                )}
                 <button className="btn ghost sm danger-text" onClick={() => end(g)}>
                   End access
                 </button>
@@ -324,24 +405,31 @@ export function GuestsSection({ state }: { state: IncidentState }) {
               <li key={i.id} className="pending">
                 <span>
                   {i.label}
+                  {i.kind === 'member' && <span className="tag">responder</span>}
                   {i.org && <span className="muted"> · {i.org}</span>}
                   {i.email && <div className="muted small mono">{i.email}</div>}
                   <div className="muted small">
                     by {userById(i.createdBy)?.displayName ?? 'someone'} · expires {hhmm(i.expiresAt)}
                   </div>
                 </span>
-                <button
-                  className="btn ghost sm"
-                  onClick={() => api.del(`/api/invites/${i.id}`).then(load).catch((e) => toast({ text: e.message, tone: 'error' }))}
-                >
-                  Cancel
-                </button>
+                <span className="row gap-sm">
+                  <button className="btn ghost sm" title="Make a new join code to give them yourself" onClick={() => newCode(i.id)}>
+                    New code
+                  </button>
+                  <button
+                    className="btn ghost sm"
+                    onClick={() => api.del(`/api/invites/${i.id}`).then(load).catch((e) => toast({ text: e.message, tone: 'error' }))}
+                  >
+                    Cancel
+                  </button>
+                </span>
               </li>
             ))}
           </ul>
         </>
       )}
-      {dialog === 'invite' && <InviteDialog state={state} onClose={() => setDialog(null)} />}
+      {dialog === 'invite' && <InviteDialog state={state} onClose={() => (setDialog(null), load())} />}
+      {codeInfo && <CodeDialog info={codeInfo} onClose={() => setCodeInfo(null)} />}
       {dialog && typeof dialog === 'object' && <AccessDialog state={state} guest={dialog.access} onClose={() => setDialog(null)} />}
     </section>
   );

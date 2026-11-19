@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, ApiError } from '../lib/api';
 
 type Provider = { id: 'okta' | 'entra'; label: string; protocol: 'oidc' | 'saml' };
-type AuthConfig = { sso: boolean; providers: Provider[]; devAuth: boolean };
+type AuthConfig = { sso: boolean; providers: Provider[]; devAuth: boolean; emailLogin: boolean; emailCanSend: boolean; mode: 'now' | 'standard' };
 
 const IDP_NAME: Record<string, string> = { okta: 'Okta', entra: 'Microsoft Entra ID' };
 
@@ -80,8 +80,13 @@ export function Login() {
             Sign in with {p.label}
           </a>
         ))}
-        {cfg && !cfg.sso && !cfg.devAuth && (
-          <div className="alert warn">Single sign-on isn’t set up yet. An admin can set up Okta or Microsoft Entra ID under Admin → Settings.</div>
+        {cfg?.emailLogin && <EmailLogin returnTo={returnTo} first={!cfg.sso} canSend={cfg.emailCanSend} />}
+        {cfg && !cfg.sso && !cfg.devAuth && !cfg.emailLogin && (
+          <div className="alert warn">
+            {cfg.mode === 'now'
+              ? 'This is a temporary War Room. Join with the invite link you were sent; the admin can set up email so people can sign back in.'
+              : 'Single sign-on isn’t set up yet. An admin can set up Okta or Microsoft Entra ID under Admin → Settings.'}
+          </div>
         )}
 
         {cfg?.devAuth && (
@@ -106,5 +111,120 @@ export function Login() {
         )}
       </div>
     </div>
+  );
+}
+
+/** Sign in with a one-time code sent to your email (accounts not linked to Okta or Entra). */
+function EmailLogin({ returnTo, first, canSend }: { returnTo: string; first: boolean; canSend: boolean }) {
+  const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  // Without email, people get a sign-in code from an admin, so go straight to entering it.
+  const [sent, setSent] = useState(!canSend);
+  const [given, setGiven] = useState(!canSend);
+  const [cooldown, setCooldown] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const t = setTimeout(() => setCooldown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [cooldown]);
+
+  const send = async (e?: FormEvent) => {
+    e?.preventDefault();
+    setErr(null);
+    setBusy(true);
+    try {
+      const r = await api.post<{ resendAfter: number }>('/auth/email/code', { email: email.trim() });
+      setSent(true);
+      setCooldown(r.resendAfter);
+    } catch (x) {
+      setErr(describeFailure(x));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const verify = async (e: FormEvent) => {
+    e.preventDefault();
+    setErr(null);
+    setBusy(true);
+    try {
+      await api.post('/auth/email/verify', { email: email.trim(), code });
+      location.href = returnTo.startsWith('/') ? returnTo : '/';
+    } catch (x) {
+      setErr(describeFailure(x));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="dev-login" onSubmit={sent ? verify : send}>
+      {!first && (
+        <div className="divider">
+          <span>Or sign in with email</span>
+        </div>
+      )}
+      {!sent ? (
+        <>
+          <label>
+            Email
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" required autoFocus={first} />
+          </label>
+          {err && <div className="alert error">{err}</div>}
+          <button className={`btn ${first ? 'primary lg' : 'secondary'} block`} disabled={busy || !email.trim()}>
+            Email me a sign-in code
+          </button>
+          <p className="hint">For people invited to this War Room by email. You’ll get a 6-digit code that works once.</p>
+          <button type="button" className="link-btn small" onClick={() => (setSent(true), setGiven(true), setErr(null))}>
+            I already have a code from an admin
+          </button>
+        </>
+      ) : (
+        <>
+          {given ? (
+            <>
+              <label>
+                Email
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@company.com" autoComplete="email" required autoFocus />
+              </label>
+              <div className="small muted">
+                {canSend ? 'Enter the sign-in code an admin gave you.' : 'This War Room doesn’t send email: ask an admin for a sign-in code (Admin → People → Sign-in code), then enter it here.'}
+              </div>
+            </>
+          ) : (
+            <div className="small">
+              If <strong>{email}</strong> has a War Room account, a code is on its way. It works once and expires in 10 minutes.
+            </div>
+          )}
+          <input
+            className="code-input mono"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="123456"
+            maxLength={7}
+            value={code}
+            onChange={(e) => setCode(e.target.value.replace(/[^\d ]/g, ''))}
+            aria-label="Sign-in code"
+            autoFocus={!given}
+          />
+          {err && <div className="alert error">{err}</div>}
+          <button className="btn primary lg block" disabled={busy || !email.trim() || code.replace(/\D/g, '').length !== 6}>
+            Sign in
+          </button>
+          {canSend && (
+            <div className="row">
+              {!given && (
+                <button type="button" className="btn ghost sm" onClick={() => send()} disabled={busy || cooldown > 0}>
+                  {cooldown > 0 ? `Send a new code in ${cooldown}s` : 'Send a new code'}
+                </button>
+              )}
+              <button type="button" className="btn ghost sm" onClick={() => (setSent(false), setGiven(false), setCode(''), setErr(null))}>
+                {given ? 'Email me a code instead' : 'Use a different email'}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </form>
   );
 }

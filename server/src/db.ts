@@ -264,6 +264,10 @@ for (const [col, type] of [
   ['code_expires_at', 'TEXT'],
   ['code_attempts', 'INTEGER NOT NULL DEFAULT 0'],
   ['code_sends', "TEXT NOT NULL DEFAULT '[]'"],
+  // 'guest' (only what the invite lists) or 'member' (a full responder account, verified by email).
+  ['kind', "TEXT NOT NULL DEFAULT 'guest'"],
+  // How the join code reaches the person: 'email' (sent by War Room) or 'manual' (shown to the inviter, who passes it on).
+  ['code_mode', "TEXT NOT NULL DEFAULT 'email'"],
 ]) {
   if (!inviteCols.has(col)) db.exec(`ALTER TABLE invites ADD COLUMN ${col} ${type}`);
 }
