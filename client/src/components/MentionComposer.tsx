@@ -3,6 +3,7 @@ import { useApp } from '../lib/app';
 import { filesFrom, humanSize, nameFor, uploadFile } from '../lib/upload';
 import type { FileItem, IncidentState, Presence } from '../types';
 import { Avatar, Icons } from './ui';
+import { awayText } from './Away';
 
 interface Pending {
   key: string;
@@ -98,18 +99,21 @@ export const MentionComposer = forwardRef<ComposerHandle, Props>(function Mentio
       .filter((u) => u.id !== me.id && (!u.isGuest || u.guestIncidentId === state.incident.id))
       .map((u) => {
         const p = here.get(u.id);
+        const away = state.members.find((m) => m.userId === u.id)?.away;
         return {
           token: u.id,
           label: u.displayName,
           userId: u.id,
           kind: 'user' as const,
-          sub: (u.isGuest ? 'Guest · ' : '') + (p ? (p.voiceRoomId ? `In ${roomName(p.voiceRoomId) ?? 'voice'}` : 'In the war room') : 'Not in the room'),
+          sub:
+            (u.isGuest ? 'Guest · ' : '') +
+            (away ? awayText(away) : p ? (p.voiceRoomId ? `In ${roomName(p.voiceRoomId) ?? 'voice'}` : 'In the war room') : 'Not in the room'),
           present: Boolean(p),
         };
       })
       .sort((a, b) => Number(b.present) - Number(a.present) || a.label.localeCompare(b.label));
     return [...list, ...people];
-  }, [users, meta.roles, state.roles, state.voiceRooms, presence, me.id, userById]);
+  }, [users, meta.roles, state.roles, state.voiceRooms, state.members, presence, me.id, userById]);
 
   const active = activeQuery(draft, caret);
   const matches = useMemo(() => {

@@ -72,9 +72,17 @@ export interface Assignment {
   assignedAt: string;
 }
 
+/** Away from keyboard, as set by the person (times ISO UTC). */
+export interface Away {
+  since: string;
+  until: string | null;
+  note: string;
+}
+
 export interface Member {
   userId: string;
   joinedAt: string;
+  away?: Away | null;
   /** What they're working on right now ('' if not set). */
   task: string;
   taskBy: string | null;
@@ -109,6 +117,8 @@ export interface IncidentState {
   sheets: { id: string; name: string }[];
   notes: { id: string; name: string }[];
   shifts: Shift[];
+  /** People asking the Incident Commander for command. */
+  commandRequests?: { userId: string; note: string; requestedAt: string }[];
 }
 
 /** A scheduled shift in a war room (times are ISO, UTC). */
@@ -182,6 +192,7 @@ export interface Presence {
   muted: boolean;
   sharing: boolean;
   view: string | null;
+  away?: Away | null;
 }
 
 export type ColumnType = 'text' | 'number' | 'select' | 'date' | 'person' | 'checkbox';

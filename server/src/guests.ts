@@ -99,6 +99,7 @@ const RULES: Rule[] = [
   ['POST', new RegExp(`^/api/incidents/${ID}/timeline$`), (u, inc, m) => m[1] === inc && canSee(u, inc, 'timeline')],
   ['DELETE', new RegExp(`^/api/timeline/${ID}$`), (u, inc, m) => lookup.timelineIncident(m[1]) === inc && canSee(u, inc, 'timeline')],
   ['PUT', new RegExp(`^/api/incidents/${ID}/members/${ID}/task$`), (u, inc, m) => m[1] === inc && m[2] === u.id],
+  ['PUT', new RegExp(`^/api/incidents/${ID}/away$`), (_u, inc, m) => m[1] === inc],
   ['GET', new RegExp(`^/api/channels/${ID}/(messages|pins)$`), (u, inc, m) => canSee(u, inc, 'channel', m[1])],
   ['POST', new RegExp(`^/api/channels/${ID}/(messages|mentions/read)$`), (u, inc, m) => canSee(u, inc, 'channel', m[1])],
   ['PATCH', new RegExp(`^/api/messages/${ID}$`), (u, inc, m) => canSee(u, inc, 'channel', lookup.channelOf(m[1]))],
@@ -285,7 +286,8 @@ guestsRouter.post(
     if (kind === 'member' && !email) throw new HttpError(400, "Enter the person's email: they'll need a code sent there to join");
     // Without email, War Room makes the code and shows it to the inviter, who passes it on another way.
     const manual = !canEmail();
-    if (!email && !manual && config.guestRequireEmail) {
+    // Only with real SMTP: in development the dev outbox doesn't make an email mandatory.
+    if (!email && smtpEnabled() && config.guestRequireEmail) {
       throw new HttpError(400, "Enter the guest's email: they'll need a code sent there to join");
     }
     const token = randomBytes(32).toString('base64url');

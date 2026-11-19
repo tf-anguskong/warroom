@@ -216,6 +216,22 @@ if (!memberCols.has('task')) {
            ALTER TABLE incident_members ADD COLUMN task_by TEXT;
            ALTER TABLE incident_members ADD COLUMN task_at TEXT;`);
 }
+// Someone asking the Incident Commander to hand command to them (cleared on handoff or decline).
+db.exec(`
+CREATE TABLE IF NOT EXISTS command_requests (
+  incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  note TEXT NOT NULL DEFAULT '',
+  requested_at TEXT NOT NULL,
+  PRIMARY KEY (incident_id, user_id)
+);
+`);
+// Away from keyboard: set by the person, kept per war room so it survives reloads and closed laptops.
+if (!memberCols.has('away_since')) {
+  db.exec(`ALTER TABLE incident_members ADD COLUMN away_since TEXT;
+           ALTER TABLE incident_members ADD COLUMN away_until TEXT;
+           ALTER TABLE incident_members ADD COLUMN away_note TEXT NOT NULL DEFAULT '';`);
+}
 const vrCols = new Set((db.prepare('PRAGMA table_info(voice_rooms)').all() as { name: string }[]).map((c) => c.name));
 if (!vrCols.has('objective')) {
   db.exec(`ALTER TABLE voice_rooms ADD COLUMN objective TEXT NOT NULL DEFAULT '';

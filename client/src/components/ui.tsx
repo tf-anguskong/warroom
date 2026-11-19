@@ -41,21 +41,25 @@ export function Avatar({
   size = 24,
   speaking,
   muted,
+  away,
 }: {
   id: string;
   name: string;
   size?: number;
   speaking?: boolean;
   muted?: boolean;
+  /** Stepped away from the keyboard: dimmed, with a clock badge. */
+  away?: boolean;
 }) {
   return (
     <span
-      className={`avatar ${speaking ? 'speaking' : ''}`}
+      className={`avatar ${speaking ? 'speaking' : ''} ${away ? 'is-away' : ''}`}
       style={{ width: size, height: size, fontSize: size * 0.42, background: userColor(id) }}
       title={name}
     >
       {initials(name)}
-      {muted && <span className="avatar-muted" aria-label="muted">{Icons.micOff}</span>}
+      {muted && !away && <span className="avatar-muted" aria-label="muted">{Icons.micOff}</span>}
+      {away && <span className="avatar-away" aria-label="away">{Icons.clock}</span>}
     </span>
   );
 }
@@ -88,6 +92,8 @@ export const Icons = {
   headphonesOff: svg(<><path d="m2 2 20 20M21 14v5a2 2 0 0 1-.6 1.4M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 2.6-6.4M8.5 3.5A9 9 0 0 1 21 12" /></>),
   screen: svg(<><rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" /></>),
   phoneOff: svg(<><path d="M10.7 13.3a16 16 0 0 0 3.4 2.6l1.3-1.3a2 2 0 0 1 2.1-.5c.8.3 1.7.5 2.6.6a2 2 0 0 1 1.7 2v3a2 2 0 0 1-2.2 2A19.8 19.8 0 0 1 3.1 4.2 2 2 0 0 1 5.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.6a2 2 0 0 1-.5 2.1L8.9 9.7" /><path d="m22 2-20 20" /></>),
+  bell: svg(<><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></>),
+  bellOff: svg(<><path d="M8.7 3A6 6 0 0 1 18 8c0 2.7.5 4.6 1.1 6M17 17H3s3-2 3-9c0-.6.1-1.2.3-1.8M10.3 21a1.94 1.94 0 0 0 3.4 0M2 2l20 20" /></>),
   volume: svg(<><path d="M11 5 6 9H2v6h4l5 4V5z" /><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14" /></>),
   hash: svg(<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18" />),
   grid: svg(<><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /></>),

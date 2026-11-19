@@ -8,6 +8,7 @@ import {
   emitDashboard,
   emitToChannel,
   emitToIncident,
+  broadcastPresence,
   emitToUser,
   presenceFor,
   joinIncidentToChannel,
@@ -557,14 +558,36 @@ api.get(
           assignedAt: a.assigned_at,
         })),
       members: q
-        .all<{ user_id: string; joined_at: string; task: string; task_by: string | null; task_at: string | null }>(
-          'SELECT user_id, joined_at, task, task_by, task_at FROM incident_members WHERE incident_id = ? ORDER BY joined_at',
+        .all<{
+          user_id: string;
+          joined_at: string;
+          task: string;
+          task_by: string | null;
+          task_at: string | null;
+          away_since: string | null;
+          away_until: string | null;
+          away_note: string;
+        }>(
+          'SELECT user_id, joined_at, task, task_by, task_at, away_since, away_until, away_note FROM incident_members WHERE incident_id = ? ORDER BY joined_at',
           inc.id,
         )
         // Guests don't see what everyone else is working on, only their own task.
         .map((m) => (viewer.is_guest && m.user_id !== viewer.id ? { ...m, task: '', task_by: null, task_at: null } : m))
-        .map((m) => ({ userId: m.user_id, joinedAt: m.joined_at, task: m.task, taskBy: m.task_by, taskAt: m.task_at })),
+        .map((m) => ({
+          userId: m.user_id,
+          joinedAt: m.joined_at,
+          task: m.task,
+          taskBy: m.task_by,
+          taskAt: m.task_at,
+          away: m.away_since ? { since: m.away_since, until: m.away_until, note: m.away_note } : null,
+        })),
       guests: guestsOf(inc.id, viewer, manageGuests),
+      // Pending asks for command: everyone in the room can see who asked (it's on the timeline anyway).
+      commandRequests: viewer.is_guest
+        ? []
+        : q
+            .all<{ user_id: string; note: string; requested_at: string }>('SELECT user_id, note, requested_at FROM command_requests WHERE incident_id = ? ORDER BY requested_at', inc.id)
+            .map((r) => ({ userId: r.user_id, note: r.note, requestedAt: r.requested_at })),
       canSeeTimeline: canSee(viewer, inc.id, 'timeline'),
       voiceRooms: voiceRooms.map(({ objective_by, objective_at, ...v }) => ({
         ...v,
@@ -640,9 +663,15 @@ api.put(
     const inc = mustIncident(req.params.id);
     const role = ROLES.find((r) => r.key === req.params.role);
     if (!role) throw new HttpError(400, 'unknown role');
-    // Command can change hands freely (anyone from the organization, never guests): it's loud and on the record.
+    // Command: the IC, room admins and admins can give it to anyone. Anyone else can step into an
+    // empty seat, but otherwise has to ask (POST /incidents/:id/command/request).
     if (role.key === 'commander') {
-      if (req.user!.is_guest) throw new HttpError(403, 'Guests can’t take or assign Incident Command');
+      const actor = req.user!;
+      if (actor.is_guest) throw new HttpError(403, 'Guests can’t take or assign Incident Command');
+      const takingEmptySeat = !commanderId(inc.id) && String(req.body?.userId ?? '') === actor.id;
+      if (!canControl(actor, inc.id) && !takingEmptySeat) {
+        throw new HttpError(403, 'Only the Incident Commander, a room admin or an admin can hand over command. Use “Request command” to ask for it.');
+      }
       return handOffCommand(req, inc);
     }
     requireControl(req, inc.id, 'assign roles');
@@ -697,6 +726,8 @@ function handOffCommand(req: Request, inc: IncidentRow) {
     ? `Incident Command ${prev ? `handed from ${prev.display_name} to ${to.display_name}` : `assigned to ${to.display_name}`} (${by})`
     : `Incident Command released by ${actor.display_name}${prev ? ` (was ${prev.display_name})` : ''}`;
   addTimeline(inc.id, actor.id, 'role', note ? `${text}. Handoff note: ${note}` : text);
+  // Whoever asked has their answer now.
+  q.run('DELETE FROM command_requests WHERE incident_id = ?', inc.id);
   systemNotice(inc.id, to ? `🎖 **${to.display_name}** is now **Incident Commander**${prev ? ` (from ${prev.display_name})` : ''}${note ? ` — ${note}` : ''}` : `Incident Command is **unassigned**`);
   for (const u of [to?.id, prev?.id]) {
     if (u && u !== actor.id) {
@@ -707,6 +738,51 @@ function handOffCommand(req: Request, inc: IncidentRow) {
   emitDashboard();
   return { ok: true };
 }
+
+/** Ask the current Incident Commander for command. They (and room admins) are notified. */
+api.post(
+  '/incidents/:id/command/request',
+  h((req) => {
+    const inc = mustIncident(req.params.id);
+    const user = req.user!;
+    if (user.is_guest) throw new HttpError(403, 'Guests can’t be Incident Commander');
+    const ic = commanderId(inc.id);
+    if (!ic) throw new HttpError(400, 'Nobody is Incident Commander yet; you can take command directly.');
+    if (ic === user.id) throw new HttpError(400, 'You’re already the Incident Commander.');
+    const prev = q.get<{ requested_at: string }>('SELECT requested_at FROM command_requests WHERE incident_id = ? AND user_id = ?', inc.id, user.id);
+    if (prev && Date.now() - new Date(prev.requested_at).getTime() < 60_000) throw new HttpError(429, 'You asked less than a minute ago. Give them a moment.');
+    const note = str(req.body?.note, 300);
+    q.run(
+      `INSERT INTO command_requests (incident_id, user_id, note, requested_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (incident_id, user_id) DO UPDATE SET note = excluded.note, requested_at = excluded.requested_at`,
+      inc.id, user.id, note, now(),
+    );
+    addTimeline(inc.id, user.id, 'role', `${user.display_name} asked for Incident Command${note ? `: ${note}` : ''}`);
+    for (const id of new Set([ic, ...roomAdminIds(inc.id)])) {
+      if (id !== user.id) emitToUser(id, 'command:requested', { incidentId: inc.id, userId: user.id, by: user.display_name, note });
+    }
+    refreshIncident(inc.id);
+    return { ok: true };
+  }),
+);
+
+/** Turn down a request for command (IC, room admins, admins). */
+api.post(
+  '/incidents/:id/command/decline',
+  h((req) => {
+    const inc = mustIncident(req.params.id);
+    requireControl(req, inc.id, 'answer requests for command');
+    const userId = str(req.body?.userId, 40);
+    const r = q.run('DELETE FROM command_requests WHERE incident_id = ? AND user_id = ?', inc.id, userId);
+    if (!r.changes) return { ok: true };
+    const who = getUser(userId);
+    const note = str(req.body?.note, 300);
+    addTimeline(inc.id, req.user!.id, 'role', `${req.user!.display_name} declined ${who?.display_name ?? 'a'}’s request for Incident Command${note ? `: ${note}` : ''}`);
+    emitToUser(userId, 'command:declined', { incidentId: inc.id, by: req.user!.display_name, note });
+    refreshIncident(inc.id);
+    return { ok: true };
+  }),
+);
 
 // ---------- voice rooms ----------
 
@@ -1044,6 +1120,34 @@ api.put(
     if (target.id !== actor.id) {
       emitToUser(target.id, 'task:set', { incidentId: inc.id, task, by: actor.display_name });
     }
+    refreshIncident(inc.id);
+    return { ok: true };
+  }),
+);
+
+/**
+ * Away from keyboard: mark yourself away (optionally with a note and when you'll be back), or back.
+ * Body: { away: true, note?, minutes? } or { away: false }.
+ */
+api.put(
+  '/incidents/:id/away',
+  h((req) => {
+    const inc = mustIncident(req.params.id);
+    const user = req.user!;
+    const ts = now();
+    if (req.body?.away) {
+      const note = str(req.body?.note, 120);
+      const minutes = Number(req.body?.minutes);
+      const until = Number.isFinite(minutes) && minutes > 0 && minutes <= 24 * 60 ? new Date(Date.now() + minutes * 60_000).toISOString() : null;
+      q.run(
+        `INSERT INTO incident_members (incident_id, user_id, joined_at, away_since, away_until, away_note) VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT (incident_id, user_id) DO UPDATE SET away_since = excluded.away_since, away_until = excluded.away_until, away_note = excluded.away_note`,
+        inc.id, user.id, ts, ts, until, note,
+      );
+    } else {
+      q.run('UPDATE incident_members SET away_since = NULL, away_until = NULL, away_note = \'\' WHERE incident_id = ? AND user_id = ?', inc.id, user.id);
+    }
+    broadcastPresence(inc.id);
     refreshIncident(inc.id);
     return { ok: true };
   }),

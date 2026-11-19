@@ -7,6 +7,7 @@ import { PersonActions } from './PersonActions';
 import type { IncidentState, Presence } from '../types';
 import { Avatar, Icons, Modal } from './ui';
 import { GuestsSection, GuestTag } from './Guests';
+import { awayText } from './Away';
 
 export function DetailsPanel({ state, presence }: { state: IncidentState; presence: Presence[] }) {
   const { meta, users, me, toast, userById } = useApp();
@@ -86,17 +87,18 @@ export function DetailsPanel({ state, presence }: { state: IncidentState; presen
           ) : (
             <span className="warn-text">No Incident Commander</span>
           )}
-          {!me.isGuest && (
+          {!me.isGuest && state.canControl && (
             <button className={`btn ${ic ? 'secondary' : 'primary'} sm`} onClick={() => setHandoff(true)}>
               {ic === me.id ? 'Hand off' : ic ? 'Reassign' : 'Assign'}
             </button>
           )}
+          {!me.isGuest && !state.canControl && !ic && (
+            <button className="btn primary sm" onClick={() => setHandoff(true)}>
+              Take command
+            </button>
+          )}
         </div>
-        {!me.isGuest && ic !== me.id && (
-          <button className="btn ghost sm take-command" onClick={() => setHandoff(true)}>
-            Take command
-          </button>
-        )}
+        <CommandRequests state={state} />
       </section>
 
       <section>
@@ -203,9 +205,10 @@ export function DetailsPanel({ state, presence }: { state: IncidentState; presen
                       draggable={state.canControl && p.userId !== me.id}
                       onDragStart={(e: DragEvent) => e.dataTransfer.setData(PERSON_DRAG, p.userId)}
                     >
-                      <Avatar id={p.userId} name={p.displayName} size={24} speaking={speaking.has(p.userId)} muted={!!p.voiceRoomId && p.muted} />
+                      <Avatar id={p.userId} name={p.displayName} size={24} speaking={speaking.has(p.userId)} muted={!!p.voiceRoomId && p.muted} away={Boolean(p.away)} />
                       <span>
                         {p.displayName}
+                        {p.away && <div className="away-line">{awayText(p.away)}</div>}
                         {roles.length > 0 && <small className="muted"> · {roles.join(', ')}</small>}
                         <GuestTag user={userById(p.userId)} />
                         {state.roomAdmins.includes(p.userId) && <small className="muted"> · room admin</small>}
@@ -227,13 +230,109 @@ export function DetailsPanel({ state, presence }: { state: IncidentState; presen
 }
 
 /** Hand Incident Command to someone (or take it). Loud on purpose: announced, notified, on the timeline. */
+/**
+ * Asking for command, and answering those asks. Only the IC, room admins and admins can hand command
+ * to someone; everyone else asks, and the IC sees the request here with Hand over / Decline.
+ */
+function CommandRequests({ state }: { state: IncidentState }) {
+  const { me, userById, toast } = useApp();
+  const [asking, setAsking] = useState(false);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const ic = state.roles.find((r) => r.role === 'commander')?.userId ?? null;
+  const requests = state.commandRequests ?? [];
+  const mine = requests.find((r) => r.userId === me.id);
+  const ago = (iso: string) => {
+    const m = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+    return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : `${Math.floor(m / 60)}h ${m % 60}m ago`;
+  };
+  const run = async (fn: () => Promise<unknown>, done: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      toast({ text: done }, 4000);
+    } catch (e) {
+      toast({ text: e instanceof Error ? e.message : 'That didn’t work', tone: 'error' }, 6000);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (me.isGuest) return null;
+
+  // People who run the room see who's asking.
+  if (state.canControl) {
+    if (!requests.length) return null;
+    return (
+      <ul className="command-requests">
+        {requests.map((r) => (
+          <li key={r.userId}>
+            <span className="grow">
+              <strong>{userById(r.userId)?.displayName ?? 'Someone'}</strong> asked for command <span className="muted small">{ago(r.requestedAt)}</span>
+              {r.note && <div className="small">“{r.note}”</div>}
+            </span>
+            <span className="row gap-sm">
+              <button
+                className="btn primary sm"
+                disabled={busy}
+                onClick={() => run(() => api.put(`/api/incidents/${state.incident.id}/roles/commander`, { userId: r.userId, note: 'Handed over on request' }), `${userById(r.userId)?.displayName} is now Incident Commander`)}
+              >
+                Hand over
+              </button>
+              <button className="btn ghost sm" disabled={busy} onClick={() => run(() => api.post(`/api/incidents/${state.incident.id}/command/decline`, { userId: r.userId }), 'Request declined')}>
+                Decline
+              </button>
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  // Everyone else can ask (when there is an IC to ask).
+  if (!ic || ic === me.id) return null;
+  if (mine) {
+    return (
+      <div className="command-ask muted small">
+        You asked for command {ago(mine.requestedAt)}. Waiting for {userById(ic)?.displayName ?? 'the Incident Commander'}.
+      </div>
+    );
+  }
+  return asking ? (
+    <form
+      className="command-ask form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void run(() => api.post(`/api/incidents/${state.incident.id}/command/request`, { note: note.trim() }), `Asked ${userById(ic)?.displayName ?? 'the Incident Commander'} for command`).then(() => {
+          setAsking(false);
+          setNote('');
+        });
+      }}
+    >
+      <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} placeholder="Why (optional): e.g. Sam’s shift is ending" autoFocus />
+      <span className="row gap-sm">
+        <button className="btn primary sm" disabled={busy}>
+          Send request
+        </button>
+        <button type="button" className="btn ghost sm" onClick={() => setAsking(false)}>
+          Cancel
+        </button>
+      </span>
+    </form>
+  ) : (
+    <button className="btn ghost sm take-command" onClick={() => setAsking(true)} title={`Ask ${userById(ic)?.displayName ?? 'the Incident Commander'} to hand command to you`}>
+      Request command
+    </button>
+  );
+}
+
 function CommandDialog({ state, presence, current, onClose }: { state: IncidentState; presence: Presence[]; current: string | null; onClose: () => void }) {
   const { users, me, toast, userById } = useApp();
   const [to, setTo] = useState(current === me.id ? '' : me.id);
   const [note, setNote] = useState('');
   const here = new Set(presence.map((p) => p.userId));
   const people = users
-    .filter((u) => !u.isGuest && u.id !== current)
+    .filter((u) => !u.isGuest && u.id !== current && (state.canControl || u.id === me.id))
     .sort((a, b) => Number(here.has(b.id)) - Number(here.has(a.id)) || a.displayName.localeCompare(b.displayName));
   const save = async () => {
     try {

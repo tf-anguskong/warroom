@@ -9,6 +9,7 @@ import { ChannelSettingsDialog, NewBreakoutDialog, NewChannelDialog, NewNoteDial
 import { VoiceDock } from './VoiceDock';
 import { PersonActions } from './PersonActions';
 import { AssignDialog, type AssignTarget } from './AssignDialog';
+import { awayText } from './Away';
 import { GuestTag } from './Guests';
 
 interface Props {
@@ -179,8 +180,9 @@ export function Sidebar({ state, presence, view, unread, mentions, onView, onJoi
                   <ul className="voice-people">
                     {inRoom.map((p) => (
                       <li key={p.userId} className={`${speakingIds.has(p.userId) ? 'speaking' : ''} ${mod.can && p.userId !== me.id ? 'movable' : ''}`} {...dragProps(p.userId)}>
-                        <Avatar id={p.userId} name={p.displayName} size={20} speaking={speakingIds.has(p.userId)} muted={p.muted} />
+                        <Avatar id={p.userId} name={p.displayName} size={20} speaking={speakingIds.has(p.userId)} muted={p.muted} away={Boolean(p.away)} />
                         <span className="nav-label">{p.displayName}</span>
+                        {p.away && <span className="away-tag" title={awayText(p.away)}>away</span>}
                         <GuestTag user={userById(p.userId)} />
                         {p.userId === leadId && <span className="lead-tag">lead</span>}
                         {p.sharing && <span className="sharing-tag" title="Sharing screen">{Icons.screen}</span>}

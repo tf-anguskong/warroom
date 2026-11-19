@@ -15,6 +15,8 @@ import { NoteView } from '../components/NoteView';
 import { FilesView } from '../components/Files';
 import { ScheduleView } from '../components/ScheduleView';
 import { ExportRoomDialog, QuickBanner } from '../components/Archive';
+import { AwayBanner } from '../components/Away';
+import { play } from '../lib/sounds';
 import { TimelineView } from '../components/TimelineView';
 import { InvestigateView } from '../components/InvestigateView';
 import { RosterView } from '../components/RosterView';
@@ -87,6 +89,18 @@ function Room({ incidentId }: { incidentId: string }) {
     }
   }, [state, presence, userById, reloadUsers]);
 
+  // Sounds when people join or leave the voice room you're in (not when you switch rooms yourself).
+  const voicePeople = useRef<{ room: string | null; ids: Set<string> }>({ room: null, ids: new Set() });
+  useEffect(() => {
+    const ids = new Set(voice.participants.filter((p) => !p.isLocal).map((p) => p.identity));
+    const prev = voicePeople.current;
+    if (voice.roomId && prev.room === voice.roomId && voice.status === 'connected') {
+      if ([...ids].some((id) => !prev.ids.has(id))) play('join');
+      else if ([...prev.ids].some((id) => !ids.has(id))) play('leave');
+    }
+    voicePeople.current = { room: voice.roomId, ids };
+  }, [voice.participants, voice.roomId, voice.status]);
+
   const view: View | null = useMemo(() => {
     if (!state) return null;
     if (requested?.kind === 'channel' && state.channels.some((c) => c.id === requested.id)) return requested;
@@ -137,6 +151,7 @@ function Room({ incidentId }: { incidentId: string }) {
     };
     const onSummon = (e: { voiceRoomId: string; name: string; by: string }) => {
       if (voiceRoomRef.current === e.voiceRoomId) return;
+      play('summon');
       toast({ text: `${e.by} is calling everyone to ${e.name}`, action: { label: 'Join', run: () => void joinRef.current(e.voiceRoomId) }, tone: 'warn' }, 20000);
     };
     const isVisible = (channelId: string) => {
@@ -144,6 +159,7 @@ function Room({ incidentId }: { incidentId: string }) {
       return v?.kind === 'channel' && v.id === channelId;
     };
     const onMention = (e: MentionEvent) => {
+      play('mention');
       if (e.incidentId === incidentId && isVisible(e.channelId)) return;
       if (e.incidentId === incidentId) setMentions((m) => ({ ...m, [e.channelId]: (m[e.channelId] ?? 0) + 1 }));
       const where = e.incidentId === incidentId ? `#${e.channelName}` : `#${e.channelName} (${e.incidentKey})`;
@@ -164,6 +180,7 @@ function Room({ incidentId }: { incidentId: string }) {
     };
     const onMoved = (e: { incidentId: string; voiceRoomId: string; name: string; by: string; invite: boolean }) => {
       if (e.incidentId !== incidentId) return;
+      play('summon');
       if (!e.invite && voiceRoomRef.current) {
         void joinVoiceRef.current(e.voiceRoomId);
         toast({ text: `${e.by} moved you to ${e.name}` }, 5000);
@@ -217,6 +234,18 @@ function Room({ incidentId }: { incidentId: string }) {
         { text: `Your shift has ended. ${e.onNow.length ? `Hand off to ${e.onNow.join(', ')}` : 'Nobody is scheduled after you; check with the Incident Commander'} before you sign off.`, tone: 'warn', action: toSchedule },
         60000,
       );
+    const onCommandRequested = (e: { incidentId: string; userId: string; by: string; note: string }) =>
+      e.incidentId === incidentId &&
+      (play('mention'), true) &&
+      toast(
+        {
+          text: `${e.by} is asking for Incident Command${e.note ? `: “${e.note}”` : ''}. Hand over or decline in the right-hand panel.`,
+          tone: 'warn',
+        },
+        20000,
+      );
+    const onCommandDeclined = (e: { incidentId: string; by: string; note: string }) =>
+      e.incidentId === incidentId && toast({ text: `${e.by} declined your request for command${e.note ? `: ${e.note}` : ''}.` }, 10000);
     const onDisconnect = () => setConnected(false);
     if (s.connected) join();
     s.on('connect', join);
@@ -232,6 +261,8 @@ function Room({ incidentId }: { incidentId: string }) {
     s.on('assigned', onAssigned);
     s.on('task:set', onTaskSet);
     s.on('command:changed', onCommand);
+    s.on('command:requested', onCommandRequested);
+    s.on('command:declined', onCommandDeclined);
     s.on('shifts:update', onShifts);
     s.on('shift:soon', onShiftSoon);
     s.on('shift:started', onShiftStarted);
@@ -251,6 +282,8 @@ function Room({ incidentId }: { incidentId: string }) {
       s.off('assigned', onAssigned);
       s.off('task:set', onTaskSet);
       s.off('command:changed', onCommand);
+      s.off('command:requested', onCommandRequested);
+      s.off('command:declined', onCommandDeclined);
       s.off('shifts:update', onShifts);
       s.off('shift:soon', onShiftSoon);
       s.off('shift:started', onShiftStarted);
@@ -307,6 +340,7 @@ function Room({ incidentId }: { incidentId: string }) {
         onJoinVoice={joinVoice}
       />
       <main className="room-main">
+        <AwayBanner state={state} />
         {meta.mode === 'now' && !me.isGuest && <QuickBanner onExport={state.canControl || me.isAdmin ? () => setExportOpen(true) : undefined} />}
         {exportOpen && <ExportRoomDialog incidentId={state.incident.id} incidentKey={state.incident.key} onClose={() => setExportOpen(false)} />}
         {me.isGuest && (

@@ -5,6 +5,12 @@ import { q } from './db.js';
 import { bus, getUser, type UserRow } from './users.js';
 import { canSee } from './guests.js';
 
+export interface Away {
+  since: string;
+  until: string | null;
+  note: string;
+}
+
 export interface PresenceEntry {
   userId: string;
   displayName: string;
@@ -12,6 +18,19 @@ export interface PresenceEntry {
   muted: boolean;
   sharing: boolean;
   view: string | null;
+  away?: Away | null;
+}
+
+/** Who has marked themselves away in this war room. */
+export function awayIn(incidentId: string): Map<string, Away> {
+  return new Map(
+    q
+      .all<{ user_id: string; away_since: string; away_until: string | null; away_note: string }>(
+        'SELECT user_id, away_since, away_until, away_note FROM incident_members WHERE incident_id = ? AND away_since IS NOT NULL',
+        incidentId,
+      )
+      .map((r) => [r.user_id, { since: r.away_since, until: r.away_until, note: r.away_note }]),
+  );
 }
 
 interface SocketData {
@@ -45,10 +64,11 @@ export function presenceFor(incidentId: string): PresenceEntry[] {
     // A user with two tabs open: prefer the tab that is in voice.
     if (!prev || (!prev.voiceRoomId && p.voiceRoomId)) byUser.set(p.userId, { ...p });
   }
-  return [...byUser.values()];
+  const away = awayIn(incidentId);
+  return [...byUser.values()].map((p) => ({ ...p, away: away.get(p.userId) ?? null }));
 }
 
-function broadcastPresence(incidentId: string) {
+export function broadcastPresence(incidentId: string) {
   io.to(`incident:${incidentId}`).emit('presence', { incidentId, users: presenceFor(incidentId) });
 }
 

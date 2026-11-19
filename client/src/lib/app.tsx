@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { api } from './api';
+import { play } from './sounds';
 import { getSocket } from './socket';
 import type { MentionEvent, Meta, User } from '../types';
 
@@ -49,6 +50,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     s.on('me:changed', loadMe);
     const onMention = (e: MentionEvent) => {
       if (location.pathname.startsWith('/incidents/')) return;
+      play('mention');
       toast(
         {
           text: `${e.by} mentioned you in #${e.channelName} (${e.incidentKey}): ${e.preview}`,

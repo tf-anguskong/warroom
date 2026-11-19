@@ -8,6 +8,7 @@ import { AssignDialog, targetLabel, type AssignTarget } from './AssignDialog';
 import { Avatar, Icons } from './ui';
 import { GuestTag } from './Guests';
 import { shiftStatus } from './ScheduleView';
+import { awayOf, awayText, isOverdue } from './Away';
 
 const STALE_MIN = 30;
 
@@ -67,7 +68,9 @@ export function RosterView({ state, presence, onOpenChannel }: { state: Incident
     const mine = byUser(userId);
     const voiceAsg = mine.filter((a) => a.targetKind === 'voice');
     const flags: Flag[] = [];
-    if (!p && mine.length) flags.push({ tone: 'warn', text: 'Assigned but not in the war room' });
+    const away = awayOf(state, userId);
+    if (away && isOverdue(away, now)) flags.push({ tone: 'warn', text: `Overdue: was due back ${away.until!.slice(11, 16)}Z` });
+    if (!p && mine.length && !away) flags.push({ tone: 'warn', text: 'Assigned but not in the war room' });
     if (p && voiceAsg.length && !voiceAsg.some((a) => a.targetId === p.voiceRoomId)) {
       const want = voiceAsg[0].targetId;
       flags.push({
@@ -209,7 +212,7 @@ export function RosterView({ state, presence, onOpenChannel }: { state: Incident
                   <tr key={id} className={p ? '' : 'away'}>
                     <td>
                       <span className="person">
-                        <Avatar id={id} name={user!.displayName} size={26} speaking={speaking.has(id)} muted={!!p?.voiceRoomId && p.muted} />
+                        <Avatar id={id} name={user!.displayName} size={26} speaking={speaking.has(id)} muted={!!p?.voiceRoomId && p.muted} away={Boolean(awayOf(state, id))} />
                         <span>
                           {user!.displayName}
                           {id === me.id && <span className="muted"> (you)</span>}
@@ -217,6 +220,7 @@ export function RosterView({ state, presence, onOpenChannel }: { state: Incident
                           <div className="muted small">
                             {[...roles, state.roomAdmins.includes(id) ? 'Room admin' : null].filter(Boolean).join(' · ') || 'Responder'}
                           </div>
+                          {awayOf(state, id) && <div className={`away-line ${isOverdue(awayOf(state, id), now) ? 'late' : ''}`}>{awayText(awayOf(state, id)!, now)}</div>}
                           {(() => {
                             const sh = shiftStatus(state.shifts ?? [], id, new Date(now).toISOString());
                             return sh ? <div className={`small ${sh.on ? 'ok-text' : 'muted'}`}>{Icons.calendar} {sh.text}</div> : null;

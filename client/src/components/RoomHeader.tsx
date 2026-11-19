@@ -6,6 +6,8 @@ import { duration, STATUS_LABEL, utcTime } from '../lib/format';
 import type { IncidentState, Severity, Status } from '../types';
 import { Icons, SeverityBadge } from './ui';
 import { ExportRoomDialog } from './Archive';
+import { AwayButton } from './Away';
+import { SoundToggle } from './SoundToggle';
 
 export function RoomHeader({ state }: { state: IncidentState }) {
   const { meta, toast, userById, me } = useApp();
@@ -114,6 +116,8 @@ export function RoomHeader({ state }: { state: IncidentState }) {
           T+{duration(inc.createdAt, inc.resolvedAt ? new Date(inc.resolvedAt).getTime() : now)}
         </span>
       </div>
+      <SoundToggle />
+      <AwayButton state={state} />
       <div className="ic-chip" title="Incident Commander">
         <span className="label">IC</span> {ic ? ic.displayName : <em className="warn-text">unassigned</em>}
       </div>
