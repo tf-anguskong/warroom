@@ -21,9 +21,33 @@ interface Cursor {
 }
 
 export function SheetView({ sheetId, state, presence }: { sheetId: string; state: IncidentState; presence: Presence[] }) {
-  const { users, userById, toast, me } = useApp();
+  const { users, userById, toast, me, reloadUsers } = useApp();
   const [data, setData] = useState<SheetData | null>(null);
   const [cells, setCells] = useState<Map<string, string>>(new Map());
+
+  // A Person cell can name someone this page hasn't loaded yet (picked by someone else, or added to
+  // War Room since the page opened). Refresh the people list once for each such ID, so the cell shows
+  // their name instead of "(unknown user)" without a reload.
+  const askedFor = useRef(new Set<string>());
+  // Person cells offer your organization plus this room's current guests (not other rooms' guests).
+  const pickable = useMemo(
+    () => users.filter((u) => u.active && (!u.isGuest || u.guestIncidentId === state.incident.id)),
+    [users, state.incident.id],
+  );
+  useEffect(() => {
+    if (!data) return;
+    const personCols = new Set(data.sheet.columns.filter((c) => c.type === 'person').map((c) => c.id));
+    if (!personCols.size) return;
+    const unknown: string[] = [];
+    for (const [k, v] of cells) {
+      const colId = k.slice(k.indexOf('|') + 1);
+      if (personCols.has(colId) && /^[0-9a-f-]{36}$/.test(v) && !userById(v) && !askedFor.current.has(v)) unknown.push(v);
+    }
+    if (unknown.length) {
+      unknown.forEach((id) => askedFor.current.add(id));
+      reloadUsers();
+    }
+  }, [data, cells, userById, reloadUsers]);
   const [sel, setSel] = useState({ r: 0, c: 0 });
   const [editing, setEditing] = useState<{ r: number; c: number; value: string } | null>(null);
   const [cursors, setCursors] = useState<Map<string, Cursor>>(new Map());
@@ -438,7 +462,7 @@ export function SheetView({ sheetId, state, presence }: { sheetId: string; state
                     >
                       {others && <span className="remote-tag">{others.map((o) => o.displayName.split(' ')[0]).join(', ')}</span>}
                       {isEdit ? (
-                        <CellEditor col={col} value={editing.value} users={users} onChange={(v) => setEditing({ ...editing, value: v })} onCommit={commit} onCancel={() => { setEditing(null); gridRef.current?.focus(); }} />
+                        <CellEditor col={col} value={editing.value} users={pickable}onChange={(v) => setEditing({ ...editing, value: v })} onCommit={commit} onCancel={() => { setEditing(null); gridRef.current?.focus(); }} />
                       ) : (
                         <CellDisplay col={col} raw={raw(r, c)} display={() => evaluator.display(c, r)} userName={(id) => userById(id)?.displayName} />
                       )}
