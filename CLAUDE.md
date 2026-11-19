@@ -35,7 +35,8 @@ server/src/
   mail.ts         nodemailer transport (TLS required), dev outbox
   realtime.ts     Socket.IO: presence, incident rooms, guest-aware broadcast
   mentions.ts     <@user> / <@role:x> / <@here> tokens
-  integrations/   Okta + Sumo Logic for the Investigate view; secrets.ts = AES-256-GCM
+  integrations/   Okta, Sumo Logic, CrowdStrike for the Investigate view; tracked endpoints and
+                  their poller live in index.ts; secrets.ts = AES-256-GCM
 client/src/
   pages/          Login, Join (guest), Setup, Dashboard, IncidentRoom, Admin
   components/     views and dialogs (AdminSettings, AdminIntegrations, Guests, Sidebar, ...)
@@ -72,6 +73,12 @@ docs/CLAUDE_DESIGN_PROMPT.md   design brief for Claude Design; update it when sc
 - `node:sqlite` (Node 24+). Migrations are additive and idempotent: `CREATE TABLE IF NOT EXISTS`, then add missing columns one at a time after checking `PRAGMA table_info`. `tsx watch` can restart halfway through an edit, so never assume a table was created with its newest columns.
 - Store only hashes of tokens and codes (invites, setup links, email codes).
 - Admin actions go through `logAdminAction`.
+
+**Integrations.**
+- Read-only by design: credentials should only need read scopes, and nothing writes back to the provider.
+- Anything typed by a responder that goes into a provider query (Okta filter, Falcon FQL) is validated and quoted; never splice raw input into a query.
+- Pollers (Okta watches, tracked endpoints) stop when the incident resolves or the integration is disabled, cap how much they post per poll, and record errors on the row instead of throwing.
+- Links from provider data shown in the browser must be checked (https only).
 
 **Client.**
 - React 18 + Vite, plain CSS with tokens (no UI framework). Make controls the viewer can't use visibly read-only, with a short reason, instead of hiding them.

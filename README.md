@@ -183,6 +183,17 @@ Connect them in **Admin → Integrations**, then use them from **Investigate** i
 |---|---|---|
 | Okta | Org URL + API token created by a **Read-Only Administrator** service account | Person profile (status, MFA factors, groups, last sign-in, password change), System Log search with quick filters (failures, MFA changes, password resets, admin privilege changes, SSO), live watch polling every 30 s into `#okta-watch` |
 | Sumo Logic | Deployment API endpoint + Access ID/Key for a role that can search | Search Job API with starter queries, template placeholders filled from the incident's sheets, auto-run on declare, results up to 500 rows |
+| CrowdStrike | Falcon cloud + API client ID/secret with **Hosts: Read** and **Alerts: Read** | Find hosts by name, IP or device ID; list alerts by host, severity and time; **track endpoints** in an incident (below) |
+
+### Tracking endpoints (CrowdStrike)
+
+In **Investigate → CrowdStrike**, enter a hostname, IP or device ID (hosts and IPs from the incident's sheets are offered as suggestions) and click **Track endpoint**. If the name matches several hosts, you pick one. Each tracked endpoint can have an **owner** (who's handling it) and a note (why it's tracked).
+
+- Every minute War Room reads each tracked endpoint from Falcon. Changes (online/offline, network containment, last signed-in user, IP addresses, reduced functionality mode) and new alerts are posted to **#crowdstrike-watch** in plain words, with the owner named.
+- When tracking starts, the last 24 hours of alerts are pulled in and summarised in one message rather than posted one by one.
+- High and critical alerts, containment changes, tracking started/stopped and owner changes go on the incident timeline.
+- The endpoint panel shows the host's details and every alert seen while it was tracked (description, command line, hash, link back to Falcon). The history stays after tracking stops or the incident is resolved; resolving the incident stops tracking.
+- Read-only: War Room never contains hosts or changes anything in Falcon. Containment done in Falcon shows up in the room within a minute.
 
 Per integration, choose who can run searches: everyone in the war room, **incident role holders and admins** (default), or admins only. Searches can expose a person's activity, so each one is recorded on the incident timeline with who ran it.
 

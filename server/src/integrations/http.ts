@@ -38,7 +38,7 @@ export async function callApi(
     try {
       const body = await res.text();
       const j = JSON.parse(body);
-      detail = j.errorSummary || j.message || j.error || body.slice(0, 200);
+      detail = j.errorSummary || j.errors?.[0]?.message || j.message || j.error_description || j.error || body.slice(0, 200);
     } catch {
       /* body not JSON */
     }

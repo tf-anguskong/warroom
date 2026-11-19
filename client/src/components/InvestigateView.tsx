@@ -5,6 +5,7 @@ import { getSocket } from '../lib/socket';
 import { utcTime } from '../lib/format';
 import type { IncidentState } from '../types';
 import { Icons } from './ui';
+import { CrowdStrikeForm, EndpointPanel, type TrackedEndpoint } from './Endpoints';
 
 interface Template {
   id: string;
@@ -18,7 +19,7 @@ interface Template {
 
 interface Integration {
   id: string;
-  type: 'okta' | 'sumo';
+  type: 'okta' | 'sumo' | 'crowdstrike';
   name: string;
   canRun: boolean;
   accessLabel: string;
@@ -93,11 +94,15 @@ export function InvestigateView({
   const [indicators, setIndicators] = useState<Record<string, string[]>>({});
   const [selected, setSelected] = useState<string | null>(null);
   const [result, setResult] = useState<Result | null>(null);
+  const [endpoints, setEndpoints] = useState<TrackedEndpoint[]>([]);
+  const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
+  const [severities, setSeverities] = useState<string[]>([]);
 
   const load = useCallback(() => {
-    api.get<{ integrations: Integration[]; oktaQuickFilters: { key: string; label: string }[] }>(`/api/incidents/${incidentId}/integrations`).then((r) => {
+    api.get<{ integrations: Integration[]; oktaQuickFilters: { key: string; label: string }[]; severities: string[] }>(`/api/incidents/${incidentId}/integrations`).then((r) => {
       setIntegrations(r.integrations);
       setQuickFilters(r.oktaQuickFilters);
+      setSeverities(r.severities ?? []);
       setActive((a) => a ?? r.integrations[0]?.id ?? null);
     });
     api.get<{ runs: Run[]; watches: Watch[] }>(`/api/incidents/${incidentId}/investigations`).then((r) => {
@@ -106,6 +111,7 @@ export function InvestigateView({
       setSelected((s) => s ?? r.runs[0]?.id ?? null);
     });
     api.get<{ indicators: Record<string, string[]> }>(`/api/incidents/${incidentId}/indicators`).then((r) => setIndicators(r.indicators));
+    api.get<{ endpoints: TrackedEndpoint[] }>(`/api/incidents/${incidentId}/endpoints`).then((r) => setEndpoints(r.endpoints));
   }, [incidentId]);
 
   useEffect(() => {
@@ -116,11 +122,14 @@ export function InvestigateView({
       setRuns((rs) => [r, ...rs.filter((x) => x.id !== r.id)].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
     };
     const onWatches = (e: { incidentId: string; watches: Watch[] }) => e.incidentId === incidentId && setWatches(e.watches);
+    const onEndpoints = (e: { incidentId: string; endpoints: TrackedEndpoint[] }) => e.incidentId === incidentId && setEndpoints(e.endpoints);
     s.on('investigation:update', onRun);
     s.on('watches:update', onWatches);
+    s.on('endpoints:update', onEndpoints);
     return () => {
       s.off('investigation:update', onRun);
       s.off('watches:update', onWatches);
+      s.off('endpoints:update', onEndpoints);
     };
   }, [incidentId, load]);
 
@@ -137,12 +146,15 @@ export function InvestigateView({
       const r = await api.post<{ run: Run }>(`/api/incidents/${incidentId}/investigations`, { integrationId, kind, params });
       setRuns((rs) => [r.run, ...rs.filter((x) => x.id !== r.run.id)]);
       setSelected(r.run.id);
+      setSelectedEndpoint(null);
     } catch (e) {
       toast({ text: e instanceof ApiError ? e.message : 'Search failed to start', tone: 'error' }, 6000);
     }
   };
 
   const integ = integrations?.find((i) => i.id === active) ?? null;
+  const shownEndpoint = endpoints.find((e) => e.id === selectedEndpoint) ?? null;
+  const hostSuggestions = useMemo(() => [...new Set([...(indicators.host ?? []), ...(indicators.ip ?? [])])], [indicators.host, indicators.ip]);
   const peopleSuggestions = useMemo(
     () => [...new Set([...(indicators.user ?? []), ...users.map((u) => u.email).filter(Boolean)] as string[])],
     [indicators.user, users],
@@ -161,10 +173,10 @@ export function InvestigateView({
           <p className="muted">
             {me.isAdmin ? (
               <>
-                Connect Okta or Sumo Logic in <a href="/admin?tab=integrations">Admin → Integrations</a> to search logs from the war room.
+                Connect Okta, Sumo Logic or CrowdStrike in <a href="/admin?tab=integrations">Admin → Integrations</a> to search logs and track endpoints from the war room.
               </>
             ) : (
-              'Ask a War Room admin to connect Okta or Sumo Logic.'
+              'Ask a War Room admin to connect Okta, Sumo Logic or CrowdStrike.'
             )}
           </p>
         </div>
@@ -213,6 +225,20 @@ export function InvestigateView({
               onOpenChannel={onOpenChannel}
             />
           )}
+          {integ?.type === 'crowdstrike' && (
+            <CrowdStrikeForm
+              key={integ.id}
+              integ={integ}
+              incidentId={incidentId}
+              severities={severities}
+              suggestions={hostSuggestions}
+              endpoints={endpoints}
+              selectedEndpoint={shownEndpoint?.id ?? null}
+              onRun={(kind, params) => start(integ.id, kind, params)}
+              onSelectEndpoint={setSelectedEndpoint}
+              onOpenChannel={onOpenChannel}
+            />
+          )}
           {integ?.type === 'sumo' && (
             <SumoForm key={integ.id} integ={integ} indicators={indicators} onRun={(params) => start(integ.id, 'sumo_search', params)} />
           )}
@@ -228,8 +254,8 @@ export function InvestigateView({
             ) : (
               <ul>
                 {runs.map((r) => (
-                  <li key={r.id} className={`${selected === r.id ? 'on' : ''} st-${r.status}`}>
-                    <button onClick={() => setSelected(r.id)}>
+                  <li key={r.id} className={`${selected === r.id && !shownEndpoint ? 'on' : ''} st-${r.status}`}>
+                    <button onClick={() => (setSelected(r.id), setSelectedEndpoint(null))}>
                       <span className={`run-dot ${r.status}`} aria-label={r.status} />
                       <span className="run-title">{r.title}</span>
                       <span className="muted small run-meta">
@@ -243,7 +269,9 @@ export function InvestigateView({
             )}
           </div>
           <div className="inv-result">
-            {selectedRun ? (
+            {shownEndpoint ? (
+              <EndpointPanel endpoint={shownEndpoint} onOpenChannel={onOpenChannel} />
+            ) : selectedRun ? (
               <ResultPanel
                 run={selectedRun}
                 result={result}

@@ -26,6 +26,19 @@ import {
   type QueryTemplate,
   type SumoCreds,
 } from './sumo.js';
+import {
+  alertsTable,
+  FALCON_CLOUDS,
+  findHosts,
+  getHosts,
+  hostsTable,
+  listAlerts,
+  SEVERITIES,
+  testFalcon,
+  type FalconAlert,
+  type FalconCreds,
+  type FalconHost,
+} from './crowdstrike.js';
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS integrations (
@@ -63,6 +76,38 @@ CREATE TABLE IF NOT EXISTS investigation_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_runs_incident ON investigation_runs(incident_id, created_at);
 
+-- Endpoints a war room is tracking in an EDR (CrowdStrike). One row per incident + device.
+CREATE TABLE IF NOT EXISTS tracked_endpoints (
+  id TEXT PRIMARY KEY,
+  incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+  integration_id TEXT REFERENCES integrations(id) ON DELETE SET NULL,
+  device_id TEXT NOT NULL,
+  hostname TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  owner_id TEXT REFERENCES users(id),
+  channel_id TEXT REFERENCES channels(id) ON DELETE SET NULL,
+  snapshot TEXT,
+  alert_since TEXT NOT NULL,
+  alert_count INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  last_polled_at TEXT,
+  last_error TEXT,
+  added_by TEXT REFERENCES users(id),
+  added_at TEXT NOT NULL,
+  removed_by TEXT REFERENCES users(id),
+  removed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_endpoints_incident ON tracked_endpoints(incident_id, active);
+
+CREATE TABLE IF NOT EXISTS endpoint_alerts (
+  endpoint_id TEXT NOT NULL REFERENCES tracked_endpoints(id) ON DELETE CASCADE,
+  alert_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  severity INTEGER NOT NULL,
+  data TEXT NOT NULL,
+  PRIMARY KEY (endpoint_id, alert_id)
+);
+
 CREATE TABLE IF NOT EXISTS investigation_watches (
   id TEXT PRIMARY KEY,
   incident_id TEXT NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
@@ -82,7 +127,7 @@ CREATE TABLE IF NOT EXISTS investigation_watches (
 // Interrupted by a restart: don't leave runs spinning forever.
 q.run("UPDATE investigation_runs SET status = 'error', error = 'Interrupted by a server restart', finished_at = ? WHERE status = 'running'", now());
 
-type IntegrationType = 'okta' | 'sumo';
+type IntegrationType = 'okta' | 'sumo' | 'crowdstrike';
 type Access = 'all' | 'roles' | 'admins';
 
 interface Settings {
@@ -105,8 +150,9 @@ interface IntegrationRow {
   last_test_msg: string | null;
 }
 
-const TYPES: IntegrationType[] = ['okta', 'sumo'];
-const SECRET_FIELDS: Record<IntegrationType, string[]> = { okta: ['token'], sumo: ['accessId', 'accessKey'] };
+const TYPES: IntegrationType[] = ['okta', 'sumo', 'crowdstrike'];
+const SECRET_FIELDS: Record<IntegrationType, string[]> = { okta: ['token'], sumo: ['accessId', 'accessKey'], crowdstrike: ['clientId', 'clientSecret'] };
+const TYPE_LABEL: Record<IntegrationType, string> = { okta: 'Okta', sumo: 'Sumo Logic', crowdstrike: 'CrowdStrike' };
 
 class HttpError extends Error {
   constructor(public status: number, message: string) {
@@ -137,8 +183,12 @@ function mustIntegration(id: string) {
   return r;
 }
 
-function creds(r: IntegrationRow): OktaCreds | SumoCreds {
+function creds(r: IntegrationRow): OktaCreds | SumoCreds | FalconCreds {
   const s = decryptSecret(r.secret_enc);
+  if (r.type === 'crowdstrike') {
+    if (!s.clientId || !s.clientSecret) throw new IntegrationError('CrowdStrike client ID/secret are not set', 400);
+    return { baseUrl: r.base_url, clientId: s.clientId, clientSecret: s.clientSecret };
+  }
   if (r.type === 'okta') {
     if (!s.token) throw new IntegrationError('Okta API token is not set', 400);
     return { baseUrl: r.base_url, token: s.token };
@@ -180,7 +230,7 @@ function adminView(r: IntegrationRow) {
     settings: s,
     // Never send secrets back; only say which ones are set (and a short hint for IDs).
     credentials: Object.fromEntries(
-      SECRET_FIELDS[r.type].map((f) => [f, secret[f] ? (f === 'accessId' ? `${secret[f].slice(0, 4)}…` : 'saved') : null]),
+      SECRET_FIELDS[r.type].map((f) => [f, secret[f] ? (f === 'accessId' || f === 'clientId' ? `${secret[f].slice(0, 4)}…` : 'saved') : null]),
     ),
     lastTest: r.last_test_at ? { at: r.last_test_at, ok: Boolean(r.last_test_ok), message: r.last_test_msg } : null,
     createdAt: r.created_at,
@@ -266,7 +316,7 @@ const emitRun = (id: string) => {
 };
 
 interface RunRequest {
-  kind: 'okta_user' | 'okta_logs' | 'sumo_search';
+  kind: 'okta_user' | 'okta_logs' | 'sumo_search' | 'cs_hosts' | 'cs_alerts';
   params: Record<string, any>;
 }
 
@@ -302,6 +352,18 @@ function planRun(r: IntegrationRow, req: RunRequest): { title: string; request: 
     const varText = Object.values(vars).filter(Boolean).join(', ');
     return { title: `Sumo: ${label}${varText ? ` (${varText})` : ''} · ${range}`, request: { templateId: tpl?.id ?? null, query, vars, range } };
   }
+  if (r.type === 'crowdstrike' && req.kind === 'cs_hosts') {
+    const query = str(p.query, 253);
+    if (!query) throw new HttpError(400, 'enter a hostname, IP address or device ID');
+    return { title: `CrowdStrike hosts: ${query}`, request: { query } };
+  }
+  if (r.type === 'crowdstrike' && req.kind === 'cs_alerts') {
+    const query = str(p.query, 253);
+    const range = ['15m', '1h', '4h', '24h', '7d', '30d'].includes(p.range) ? p.range : '24h';
+    const minSeverity = SEVERITIES.includes(p.minSeverity) ? p.minSeverity : 'Informational';
+    const sev = minSeverity === 'Informational' ? '' : ` · ${minSeverity}+`;
+    return { title: `CrowdStrike alerts${query ? ` on ${query}` : ''}${sev} · ${range}`, request: { query, range, minSeverity } };
+  }
   throw new HttpError(400, `unsupported action for ${r.type}`);
 }
 
@@ -330,6 +392,17 @@ async function executeRun(runId: string) {
     } else if (run.kind === 'okta_logs') {
       const table = await searchOktaLogs(c as OktaCreds, { ...req, since: sinceFor(req.range) });
       finish({ status: 'done', result: { type: 'table', ...table }, rowCount: table.total });
+    } else if (run.kind === 'cs_hosts') {
+      const hosts = await findHosts(c as FalconCreds, req.query);
+      finish({ status: 'done', result: { type: 'table', ...hostsTable(hosts) }, rowCount: hosts.length });
+    } else if (run.kind === 'cs_alerts') {
+      let deviceIds: string[] | undefined;
+      if (req.query) {
+        deviceIds = (await findHosts(c as FalconCreds, req.query)).map((h) => h.deviceId);
+        if (!deviceIds.length) throw new IntegrationError(`No host in CrowdStrike matches “${req.query}”`, 404);
+      }
+      const { alerts, total } = await listAlerts(c as FalconCreds, { deviceIds, since: sinceFor(req.range), minSeverity: req.minSeverity });
+      finish({ status: 'done', result: { type: 'table', ...alertsTable(alerts, total) }, rowCount: total });
     } else if (run.kind === 'sumo_search') {
       const to = Date.now();
       const table = await runSumoSearch(c as SumoCreds, req.query, to - rangeToMs(req.range), to, (msg) => {
@@ -534,7 +607,9 @@ integrationsRouter.get(
         types: [
           { type: 'okta', label: 'Okta', description: 'Look up people and search or live-watch the Okta System Log.' },
           { type: 'sumo', label: 'Sumo Logic', description: 'Run log searches and starter queries from the war room.' },
+          { type: 'crowdstrike', label: 'CrowdStrike', description: 'Find hosts, read their alerts, and track specific endpoints during an incident.' },
         ],
+        falconClouds: FALCON_CLOUDS,
         sumoDeployments: SUMO_DEPLOYMENTS,
         defaultSumoTemplates: DEFAULT_SUMO_TEMPLATES,
         access: ACCESS_LABEL,
@@ -558,7 +633,7 @@ integrationsRouter.post(
     requireAdmin(req);
     const type = req.body?.type as IntegrationType;
     if (!TYPES.includes(type)) throw new HttpError(400, 'unknown integration type');
-    const name = str(req.body?.name, 80) || (type === 'okta' ? 'Okta' : 'Sumo Logic');
+    const name = str(req.body?.name, 80) || TYPE_LABEL[type];
     const baseUrl = normalizeBaseUrl(str(req.body?.baseUrl, 300));
     const secret = credentialUpdate(type, req.body?.credentials, {});
     const settings = sanitizeSettings(type, req.body?.settings);
@@ -620,8 +695,11 @@ integrationsRouter.delete(
     requireAdmin(req);
     const r = mustIntegration(req.params.id);
     const incidents = q.all<{ incident_id: string }>('SELECT DISTINCT incident_id FROM investigation_watches WHERE integration_id = ?', r.id);
+    const tracking = q.all<{ incident_id: string }>('SELECT DISTINCT incident_id FROM tracked_endpoints WHERE integration_id = ? AND active = 1', r.id);
+    q.run("UPDATE tracked_endpoints SET active = 0, last_error = 'Stopped: integration removed' WHERE integration_id = ? AND active = 1", r.id);
     q.run('DELETE FROM integrations WHERE id = ?', r.id);
     incidents.forEach((i) => emitWatches(i.incident_id));
+    tracking.forEach((i) => emitEndpoints(i.incident_id));
     logAdminAction(req.user!.id, null, 'integration_removed', `${r.name} (${r.type})`);
     return { ok: true };
   }),
@@ -635,7 +713,12 @@ integrationsRouter.post(
     let ok = false;
     let message: string;
     try {
-      message = r.type === 'okta' ? await testOkta(creds(r) as OktaCreds) : await testSumo(creds(r) as SumoCreds);
+      message =
+        r.type === 'okta'
+          ? await testOkta(creds(r) as OktaCreds)
+          : r.type === 'crowdstrike'
+            ? await testFalcon(creds(r) as FalconCreds)
+            : await testSumo(creds(r) as SumoCreds);
       ok = true;
     } catch (err) {
       message = err instanceof Error ? err.message : String(err);
@@ -664,6 +747,7 @@ integrationsRouter.get(
         };
       }),
       oktaQuickFilters: OKTA_QUICK_FILTERS.map(({ key, label }) => ({ key, label })),
+      severities: SEVERITIES,
     };
   }),
 );
@@ -825,3 +909,378 @@ integrationsRouter.delete(
   }),
 );
 
+
+// ---------- tracked endpoints (CrowdStrike) ----------
+//
+// A war room can track specific endpoints. Every minute War Room reads each one's state from
+// Falcon and its new alerts, posts changes and alerts to #crowdstrike-watch, and keeps the alerts
+// with the endpoint so the room has the history after the incident. Each endpoint can have an
+// owner (who's handling it) and a note (why it's tracked).
+
+const ENDPOINT_INTERVAL_MS = 60_000;
+const MAX_TRACKED_PER_INCIDENT = 50;
+const MAX_ALERT_POSTS_PER_POLL = 15;
+const BACKFILL_HOURS = 24;
+
+interface EndpointRow {
+  id: string;
+  incident_id: string;
+  integration_id: string | null;
+  device_id: string;
+  hostname: string;
+  note: string;
+  owner_id: string | null;
+  channel_id: string | null;
+  snapshot: string | null;
+  alert_since: string;
+  alert_count: number;
+  active: number;
+  last_polled_at: string | null;
+  last_error: string | null;
+  added_by: string | null;
+  added_at: string;
+  removed_by: string | null;
+  removed_at: string | null;
+}
+
+const getEndpoint = (id: string) => q.get<EndpointRow>('SELECT * FROM tracked_endpoints WHERE id = ?', id);
+const userName = (id: string | null) => (id ? getUser(id)?.display_name ?? null : null);
+
+function endpointView(e: EndpointRow) {
+  const recent = q
+    .all<{ data: string }>('SELECT data FROM endpoint_alerts WHERE endpoint_id = ? ORDER BY created_at DESC LIMIT 5', e.id)
+    .map((r) => JSON.parse(r.data) as FalconAlert);
+  const severe = q.get<{ n: number }>('SELECT COUNT(*) AS n FROM endpoint_alerts WHERE endpoint_id = ? AND severity >= 60', e.id)!.n;
+  return {
+    id: e.id,
+    incidentId: e.incident_id,
+    integrationId: e.integration_id,
+    integrationName: e.integration_id ? getIntegration(e.integration_id)?.name ?? null : null,
+    deviceId: e.device_id,
+    hostname: e.hostname,
+    note: e.note,
+    owner: e.owner_id ? { id: e.owner_id, name: userName(e.owner_id) } : null,
+    channelId: e.channel_id,
+    host: e.snapshot ? (JSON.parse(e.snapshot) as FalconHost) : null,
+    alertCount: e.alert_count,
+    severeCount: severe,
+    recentAlerts: recent,
+    active: Boolean(e.active),
+    lastPolledAt: e.last_polled_at,
+    lastError: e.last_error,
+    addedByName: userName(e.added_by),
+    addedAt: e.added_at,
+    removedByName: userName(e.removed_by),
+    removedAt: e.removed_at,
+  };
+}
+
+const endpointsOf = (incidentId: string) =>
+  q.all<EndpointRow>('SELECT * FROM tracked_endpoints WHERE incident_id = ? ORDER BY active DESC, added_at', incidentId).map(endpointView);
+
+function emitEndpoints(incidentId: string) {
+  emitToIncident(incidentId, 'endpoints:update', { incidentId, endpoints: endpointsOf(incidentId) });
+}
+
+function edrChannel(incidentId: string, userId: string) {
+  const existing = q.get<{ id: string }>("SELECT id FROM channels WHERE incident_id = ? AND name = 'crowdstrike-watch' AND archived = 0", incidentId);
+  if (existing) return existing.id;
+  const id = createChannel(incidentId, userId, 'crowdstrike-watch', 'Tracked endpoints: state changes and new CrowdStrike alerts', []);
+  joinIncidentToChannel(incidentId, id);
+  refreshIncident(incidentId);
+  return id;
+}
+
+const SEV_ICON: Record<string, string> = { Critical: '🟥', High: '🟧', Medium: '🟨', Low: '🟦', Informational: '⬜' };
+
+function describeAlert(a: FalconAlert, e: EndpointRow) {
+  const bits = [[a.tactic, a.technique].filter(Boolean).join(' / '), a.user && `user \`${a.user}\``, a.file && `file \`${a.file}\``].filter(Boolean);
+  const owner = e.owner_id ? ` · owner ${userName(e.owner_id)}` : '';
+  let text = `${SEV_ICON[a.severityName] ?? '⬜'} **${a.severityName}** on **${e.hostname}** · ${a.name}${bits.length ? ` · ${bits.join(' · ')}` : ''}${owner}`;
+  if (a.cmdline) text += '\n```\n' + a.cmdline.slice(0, 500) + '\n```';
+  return text;
+}
+
+/** What changed on a host since we last looked, in plain words. */
+function hostChanges(prev: FalconHost | null, next: FalconHost): string[] {
+  if (!prev) return [];
+  const out: string[] = [];
+  if (prev.online !== next.online && next.online !== 'unknown') out.push(next.online === 'online' ? 'came **online**' : 'went **offline**');
+  if (prev.status !== next.status) {
+    const label: Record<string, string> = {
+      contained: 'is now **network contained**',
+      containment_pending: 'containment was **requested** (pending)',
+      lift_containment_pending: 'containment lift was **requested** (pending)',
+      normal: 'is **no longer contained**',
+    };
+    out.push(label[next.status] ?? `containment status is now ${next.status}`);
+  }
+  if (prev.lastUser !== next.lastUser && next.lastUser) out.push(`last signed-in user changed to \`${next.lastUser}\``);
+  if (prev.localIp !== next.localIp && next.localIp) out.push(`local IP changed to \`${next.localIp}\``);
+  if (prev.externalIp !== next.externalIp && next.externalIp) out.push(`external IP changed to \`${next.externalIp}\``);
+  if (!prev.reducedFunctionality && next.reducedFunctionality) out.push('sensor entered **reduced functionality mode**');
+  return out;
+}
+
+async function pollEndpointGroup(integ: IntegrationRow, rows: EndpointRow[]) {
+  const c = creds(integ) as FalconCreds;
+  const touched = new Set<string>();
+  const ids = [...new Set(rows.map((r) => r.device_id))];
+  let hosts: Map<string, FalconHost>;
+  try {
+    hosts = new Map((await getHosts(c, ids)).map((h) => [h.deviceId, h]));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    for (const r of rows) {
+      q.run('UPDATE tracked_endpoints SET last_polled_at = ?, last_error = ? WHERE id = ?', now(), msg, r.id);
+      touched.add(r.incident_id);
+    }
+    touched.forEach(emitEndpoints);
+    return;
+  }
+
+  for (const r of rows) {
+    const h = hosts.get(r.device_id);
+    touched.add(r.incident_id);
+    if (!h) {
+      q.run("UPDATE tracked_endpoints SET last_error = 'Not found in CrowdStrike (removed or hidden)' WHERE id = ?", r.id);
+      continue;
+    }
+    const changes = hostChanges(r.snapshot ? JSON.parse(r.snapshot) : null, h);
+    if (changes.length && r.channel_id) postMessage(r.channel_id, null, `🖥️ **${h.hostname}** ${changes.join('; ')}`, 'system');
+    const containment = changes.filter((x) => /contain/.test(x));
+    if (containment.length) addTimeline(r.incident_id, null, 'investigation', `${h.hostname}: ${containment.join('; ').replace(/\*\*/g, '')}`, { endpointId: r.id });
+    q.run('UPDATE tracked_endpoints SET snapshot = ?, hostname = ?, last_error = NULL WHERE id = ?', JSON.stringify(h), h.hostname, r.id);
+  }
+
+  // New alerts for every tracked device in this integration, oldest first.
+  const since = rows.map((r) => r.alert_since).sort()[0];
+  let alerts: FalconAlert[] = [];
+  let alertError: string | null = null;
+  try {
+    alerts = (await listAlerts(c, { deviceIds: ids, since, asc: true, limit: 200 })).alerts;
+  } catch (err) {
+    alertError = `Alerts: ${err instanceof Error ? err.message : String(err)}`;
+  }
+  for (const r of rows) {
+    const firstLook = !r.last_polled_at;
+    q.run('UPDATE tracked_endpoints SET last_polled_at = ?, last_error = COALESCE(?, last_error) WHERE id = ?', now(), alertError, r.id);
+    if (alertError) continue;
+    const mine = alerts.filter((a) => a.deviceId === r.device_id && a.createdAt > r.alert_since);
+    const fresh = mine.filter(
+      (a) =>
+        q.run('INSERT OR IGNORE INTO endpoint_alerts (endpoint_id, alert_id, created_at, severity, data) VALUES (?, ?, ?, ?, ?)', r.id, a.id, a.createdAt, a.severity, JSON.stringify(a))
+          .changes === 1,
+    );
+    const latest = mine.at(-1)?.createdAt ?? r.alert_since;
+    q.run('UPDATE tracked_endpoints SET alert_since = ?, alert_count = alert_count + ? WHERE id = ?', latest, fresh.length, r.id);
+    if (!fresh.length || !r.channel_id) continue;
+    if (firstLook) {
+      // First look: summarise the backfill instead of posting each alert.
+      const severe = fresh.filter((a) => a.severity >= 60).length;
+      postMessage(
+        r.channel_id,
+        null,
+        `🛡️ **${r.hostname}** had ${fresh.length} alert${fresh.length === 1 ? '' : 's'} in the last ${BACKFILL_HOURS} hours${severe ? `, **${severe} high or critical**` : ''}. They're listed on the endpoint in **Investigate**.`,
+        'system',
+      );
+      continue;
+    }
+    const shown = fresh.slice(-MAX_ALERT_POSTS_PER_POLL);
+    if (fresh.length > shown.length) postMessage(r.channel_id, null, `🛡️ ${fresh.length - shown.length} earlier alerts on **${r.hostname}** not shown here; see the endpoint in **Investigate**.`, 'system');
+    for (const a of shown) postMessage(r.channel_id, null, describeAlert(a, r), 'system');
+    for (const a of fresh.filter((x) => x.severity >= 60)) {
+      addTimeline(r.incident_id, null, 'investigation', `CrowdStrike ${a.severityName} alert on ${r.hostname}: ${a.name}`, { endpointId: r.id, alertId: a.id }, a.createdAt);
+    }
+  }
+  touched.forEach(emitEndpoints);
+}
+
+async function pollEndpoints(onlyId?: string) {
+  const rows = onlyId
+    ? q.all<EndpointRow>('SELECT * FROM tracked_endpoints WHERE id = ? AND active = 1', onlyId)
+    : q.all<EndpointRow>('SELECT * FROM tracked_endpoints WHERE active = 1');
+  const groups = new Map<string, EndpointRow[]>();
+  for (const r of rows) {
+    const inc = q.get<{ status: string }>('SELECT status FROM incidents WHERE id = ?', r.incident_id);
+    const integ = r.integration_id ? getIntegration(r.integration_id) : undefined;
+    if (!inc || inc.status === 'resolved' || !integ?.enabled) {
+      const why = !inc || inc.status === 'resolved' ? 'Stopped: incident resolved' : 'Stopped: integration disabled';
+      q.run('UPDATE tracked_endpoints SET active = 0, last_error = ? WHERE id = ?', why, r.id);
+      emitEndpoints(r.incident_id);
+      continue;
+    }
+    groups.set(integ.id, [...(groups.get(integ.id) ?? []), r]);
+  }
+  for (const [integId, list] of groups) {
+    try {
+      await pollEndpointGroup(getIntegration(integId)!, list);
+    } catch (err) {
+      console.error('[integrations] endpoint poll failed', err);
+    }
+  }
+}
+
+/** One poll at a time: a refresh asked for during a poll runs right after it. */
+let endpointPolling: Promise<void> = Promise.resolve();
+function runEndpointPoll(onlyId?: string) {
+  endpointPolling = endpointPolling.catch(() => undefined).then(() => pollEndpoints(onlyId));
+  return endpointPolling;
+}
+setInterval(() => void runEndpointPoll(), ENDPOINT_INTERVAL_MS).unref();
+
+const hostSummary = (h: FalconHost) => ({
+  deviceId: h.deviceId,
+  hostname: h.hostname,
+  os: h.os,
+  online: h.online,
+  status: h.status,
+  lastSeen: h.lastSeen,
+  localIp: h.localIp,
+  lastUser: h.lastUser,
+});
+
+function mustTrackable(incidentId: string, integrationId: string, user: UserRow) {
+  const inc = q.get<{ id: string; status: string }>('SELECT id, status FROM incidents WHERE id = ?', incidentId);
+  if (!inc) throw new HttpError(404, 'incident not found');
+  if (inc.status === 'resolved') throw new HttpError(400, 'incident is resolved');
+  const integ = mustIntegration(integrationId);
+  if (integ.type !== 'crowdstrike') throw new HttpError(400, 'endpoint tracking is available for CrowdStrike');
+  if (!integ.enabled) throw new HttpError(400, `${integ.name} is disabled`);
+  if (!canRun(user, integ, inc.id)) throw new HttpError(403, `you don't have access to ${integ.name} here (${ACCESS_LABEL[settingsOf(integ).access]})`);
+  return { inc, integ };
+}
+
+function validOwner(ownerId: unknown) {
+  if (!ownerId) return null;
+  const u = getUser(String(ownerId));
+  if (!u || !u.active || u.is_guest) throw new HttpError(400, 'pick an active member as the owner');
+  return u.id;
+}
+
+integrationsRouter.get('/incidents/:id/endpoints', h((req) => ({ endpoints: endpointsOf(req.params.id) })));
+
+/**
+ * Track an endpoint. Pass `deviceId`, or a `query` (hostname, IP or device ID). If the query
+ * matches several hosts, nothing is tracked and the matches come back so the person can pick one.
+ */
+integrationsRouter.post(
+  '/incidents/:id/endpoints',
+  h(async (req) => {
+    const { inc, integ } = mustTrackable(req.params.id, str(req.body?.integrationId), req.user!);
+    const ownerId = validOwner(req.body?.ownerId);
+    const note = str(req.body?.note, 300);
+    const c = creds(integ) as FalconCreds;
+    const deviceId = str(req.body?.deviceId, 64).toLowerCase();
+    let host: FalconHost | undefined;
+    if (deviceId) {
+      if (!/^[0-9a-f]{32}$/.test(deviceId)) throw new HttpError(400, 'that is not a CrowdStrike device ID');
+      host = (await getHosts(c, [deviceId]))[0];
+      if (!host) throw new HttpError(404, 'No host with that device ID in CrowdStrike');
+    } else {
+      const query = str(req.body?.query, 253);
+      const matches = await findHosts(c, query, 10);
+      if (!matches.length) throw new HttpError(404, `No host in CrowdStrike matches “${query}”`);
+      if (matches.length > 1) return { needsChoice: true, matches: matches.map(hostSummary) };
+      host = matches[0];
+    }
+    if (q.get('SELECT 1 FROM tracked_endpoints WHERE incident_id = ? AND device_id = ? AND active = 1', inc.id, host.deviceId)) {
+      throw new HttpError(409, `${host.hostname} is already tracked in this incident`);
+    }
+    if (q.get<{ n: number }>('SELECT COUNT(*) AS n FROM tracked_endpoints WHERE incident_id = ? AND active = 1', inc.id)!.n >= MAX_TRACKED_PER_INCIDENT) {
+      throw new HttpError(429, `at most ${MAX_TRACKED_PER_INCIDENT} endpoints can be tracked per incident`);
+    }
+    const channelId = edrChannel(inc.id, req.user!.id);
+    const id = newId();
+    q.run(
+      `INSERT INTO tracked_endpoints (id, incident_id, integration_id, device_id, hostname, note, owner_id, channel_id, snapshot, alert_since, added_by, added_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id,
+      inc.id,
+      integ.id,
+      host.deviceId,
+      host.hostname,
+      note,
+      ownerId,
+      channelId,
+      JSON.stringify(host),
+      new Date(Date.now() - BACKFILL_HOURS * 3600e3).toISOString(),
+      req.user!.id,
+      now(),
+    );
+    const owner = ownerId ? `, owner ${userName(ownerId)}` : '';
+    const state = `${host.os || host.platform}, ${host.online}, ${host.status === 'normal' ? 'not contained' : host.status.replace(/_/g, ' ')}`;
+    postMessage(
+      channelId,
+      null,
+      `${req.user!.display_name} started tracking **${host.hostname}** (${state})${owner}${note ? ` · ${note}` : ''}. State changes and new alerts appear here about every minute.`,
+      'system',
+    );
+    addTimeline(inc.id, req.user!.id, 'investigation', `Started tracking endpoint ${host.hostname}${note ? `: ${note}` : ''}${owner}`, { endpointId: id });
+    emitEndpoints(inc.id);
+    void runEndpointPoll(id);
+    return { endpoint: endpointView(getEndpoint(id)!), channelId };
+  }),
+);
+
+function mustEndpointAccess(id: string, user: UserRow) {
+  const e = getEndpoint(id);
+  if (!e) throw new HttpError(404, 'not found');
+  const integ = e.integration_id ? getIntegration(e.integration_id) : undefined;
+  if (!integ || !canRun(user, integ, e.incident_id)) throw new HttpError(403, 'not allowed');
+  return e;
+}
+
+/** Change the note or owner. */
+integrationsRouter.patch(
+  '/endpoints/:id',
+  h((req) => {
+    const e = mustEndpointAccess(req.params.id, req.user!);
+    const note = req.body?.note !== undefined ? str(req.body.note, 300) : e.note;
+    const ownerId = req.body?.ownerId !== undefined ? validOwner(req.body.ownerId) : e.owner_id;
+    q.run('UPDATE tracked_endpoints SET note = ?, owner_id = ? WHERE id = ?', note, ownerId, e.id);
+    if (ownerId !== e.owner_id) {
+      const text = ownerId ? `${userName(ownerId)} now owns endpoint ${e.hostname}` : `${e.hostname} no longer has an owner`;
+      addTimeline(e.incident_id, req.user!.id, 'assign', `${text} (set by ${req.user!.display_name})`, { endpointId: e.id });
+      if (e.channel_id) postMessage(e.channel_id, null, `🖥️ ${text} (set by ${req.user!.display_name})`, 'system');
+    }
+    emitEndpoints(e.incident_id);
+    return { endpoint: endpointView(getEndpoint(e.id)!) };
+  }),
+);
+
+integrationsRouter.delete(
+  '/endpoints/:id',
+  h((req) => {
+    const e = mustEndpointAccess(req.params.id, req.user!);
+    if (!e.active) return { ok: true };
+    q.run('UPDATE tracked_endpoints SET active = 0, removed_by = ?, removed_at = ? WHERE id = ?', req.user!.id, now(), e.id);
+    if (e.channel_id) postMessage(e.channel_id, null, `${req.user!.display_name} stopped tracking **${e.hostname}** (${e.alert_count} alerts seen).`, 'system');
+    addTimeline(e.incident_id, req.user!.id, 'investigation', `Stopped tracking endpoint ${e.hostname}`, { endpointId: e.id });
+    emitEndpoints(e.incident_id);
+    return { ok: true };
+  }),
+);
+
+integrationsRouter.post(
+  '/endpoints/:id/refresh',
+  h(async (req) => {
+    const e = mustEndpointAccess(req.params.id, req.user!);
+    if (!e.active) throw new HttpError(400, 'this endpoint is no longer tracked');
+    await runEndpointPoll(e.id);
+    return { endpoint: endpointView(getEndpoint(e.id)!) };
+  }),
+);
+
+integrationsRouter.get(
+  '/endpoints/:id/alerts',
+  h((req) => {
+    const e = getEndpoint(req.params.id);
+    if (!e) throw new HttpError(404, 'not found');
+    return {
+      alerts: q
+        .all<{ data: string }>('SELECT data FROM endpoint_alerts WHERE endpoint_id = ? ORDER BY created_at DESC LIMIT 500', e.id)
+        .map((r) => JSON.parse(r.data) as FalconAlert),
+    };
+  }),
+);

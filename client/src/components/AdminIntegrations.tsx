@@ -15,9 +15,12 @@ interface Template {
   autoRun: boolean;
 }
 
+type IntegrationType = 'okta' | 'sumo' | 'crowdstrike';
+const TYPE_LABEL: Record<IntegrationType, string> = { okta: 'Okta', sumo: 'Sumo Logic', crowdstrike: 'CrowdStrike' };
+
 interface AdminIntegration {
   id: string;
-  type: 'okta' | 'sumo';
+  type: IntegrationType;
   name: string;
   baseUrl: string;
   enabled: boolean;
@@ -27,8 +30,9 @@ interface AdminIntegration {
 }
 
 interface Catalog {
-  types: { type: 'okta' | 'sumo'; label: string; description: string }[];
+  types: { type: IntegrationType; label: string; description: string }[];
   sumoDeployments: { key: string; label: string; url: string }[];
+  falconClouds: { key: string; label: string; url: string }[];
   defaultSumoTemplates: Template[];
   access: Record<Access, string>;
 }
@@ -37,7 +41,7 @@ export function AdminIntegrations({ onChanged }: { onChanged: () => void }) {
   const { toast } = useApp();
   const [items, setItems] = useState<AdminIntegration[] | null>(null);
   const [catalog, setCatalog] = useState<Catalog | null>(null);
-  const [editing, setEditing] = useState<AdminIntegration | { type: 'okta' | 'sumo' } | null>(null);
+  const [editing, setEditing] = useState<AdminIntegration | { type: IntegrationType } | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -102,7 +106,7 @@ export function AdminIntegrations({ onChanged }: { onChanged: () => void }) {
               <span className="integ-icon">{Icons.plug}</span>
               <div className="grow">
                 <div>
-                  <strong>{i.name}</strong> <span className="tag">{i.type === 'okta' ? 'Okta' : 'Sumo Logic'}</span>
+                  <strong>{i.name}</strong> <span className="tag">{TYPE_LABEL[i.type]}</span>
                   {!i.enabled && <span className="tag">disabled</span>}
                 </div>
                 <div className="muted small mono">{i.baseUrl}</div>
@@ -165,14 +169,16 @@ function IntegrationDialog({
 }: {
   catalog: Catalog;
   existing: AdminIntegration | null;
-  type: 'okta' | 'sumo';
+  type: IntegrationType;
   onClose: () => void;
   onSaved: (id: string) => void;
   onDeleted: () => void;
 }) {
   const { toast } = useApp();
-  const [name, setName] = useState(existing?.name ?? (type === 'okta' ? 'Okta' : 'Sumo Logic'));
-  const [baseUrl, setBaseUrl] = useState(existing?.baseUrl ?? (type === 'sumo' ? catalog.sumoDeployments[0].url : ''));
+  const [name, setName] = useState(existing?.name ?? TYPE_LABEL[type]);
+  const [baseUrl, setBaseUrl] = useState(
+    existing?.baseUrl ?? (type === 'sumo' ? catalog.sumoDeployments[0].url : type === 'crowdstrike' ? catalog.falconClouds[0].url : ''),
+  );
   const [creds, setCreds] = useState<Record<string, string>>({});
   const [access, setAccess] = useState<Access>(existing?.settings.access ?? 'roles');
   const [templates, setTemplates] = useState<Template[]>(existing?.settings.templates ?? catalog.defaultSumoTemplates);
@@ -180,6 +186,7 @@ function IntegrationDialog({
   const [busy, setBusy] = useState(false);
   const saved = existing?.credentials ?? {};
   const deployment = catalog.sumoDeployments.find((d) => d.url === baseUrl)?.key ?? 'custom';
+  const cloud = catalog.falconClouds.find((d) => d.url === baseUrl)?.key ?? 'custom';
 
   const save = async () => {
     setBusy(true);
@@ -217,7 +224,7 @@ function IntegrationDialog({
 
   return (
     <Modal
-      title={existing ? `Edit ${existing.name}` : `Connect ${type === 'okta' ? 'Okta' : 'Sumo Logic'}`}
+      title={existing ? `Edit ${existing.name}` : `Connect ${TYPE_LABEL[type]}`}
       onClose={onClose}
       wide
       footer={
@@ -253,6 +260,41 @@ function IntegrationDialog({
             <p className="hint">
               Create the token while signed in as a <strong>Read-Only Administrator</strong> service account. War Room only reads users, factors, groups and the
               System Log; it never changes anything in Okta.
+            </p>
+          </>
+        ) : type === 'crowdstrike' ? (
+          <>
+            <label>
+              Falcon cloud
+              <select
+                value={cloud}
+                onChange={(e) => {
+                  const d = catalog.falconClouds.find((x) => x.key === e.target.value);
+                  setBaseUrl(d ? d.url : '');
+                }}
+              >
+                {catalog.falconClouds.map((d) => (
+                  <option key={d.key} value={d.key}>
+                    {d.label} — {d.url}
+                  </option>
+                ))}
+                <option value="custom">Custom API address…</option>
+              </select>
+            </label>
+            {cloud === 'custom' && (
+              <label>
+                API address
+                <input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} placeholder="https://api.crowdstrike.com" />
+              </label>
+            )}
+            <div className="row">
+              {secretInput('clientId', 'Client ID', 'API client ID')}
+              {secretInput('clientSecret', 'Client secret', 'API client secret')}
+            </div>
+            <p className="hint">
+              In Falcon, go to Support and resources → <strong>API clients and keys</strong> and add a client with only <strong>Hosts: Read</strong> and{' '}
+              <strong>Alerts: Read</strong>. War Room finds hosts, reads their state and alerts, and tracks endpoints you pick; it never changes anything in
+              Falcon.
             </p>
           </>
         ) : (
