@@ -179,6 +179,12 @@ if (!userCols.has('last_login_provider')) db.exec('ALTER TABLE users ADD COLUMN 
 // Unix seconds: sessions issued before this are no longer accepted (set when SSO first links an existing account).
 if (!userCols.has('sessions_valid_after')) db.exec('ALTER TABLE users ADD COLUMN sessions_valid_after INTEGER');
 
+// The AI agent (MCP) that posted a message or wrote a timeline entry for the person in user_id.
+for (const table of ['messages', 'timeline']) {
+  const cols = new Set((db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name));
+  if (!cols.has('agent')) db.exec(`ALTER TABLE ${table} ADD COLUMN agent TEXT`);
+}
+
 // War room control: people besides the Incident Commander who can run the room.
 db.exec(`
 CREATE TABLE IF NOT EXISTS incident_room_admins (

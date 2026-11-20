@@ -6,6 +6,7 @@ import { utcTime } from '../lib/format';
 import { Avatar, Icons, Modal } from '../components/ui';
 import { AdminIntegrations } from '../components/AdminIntegrations';
 import { AdminSettings } from '../components/AdminSettings';
+import { AdminAgents } from '../components/Agents';
 
 interface AdminSources {
   granted: boolean;
@@ -76,7 +77,7 @@ export function Admin() {
   const [loginCode, setLoginCode] = useState<{ code: string; name: string; email: string } | null>(null);
   const [params, setParams] = useSearchParams();
   const t = params.get('tab');
-  const tab = t === 'integrations' || t === 'settings' ? t : 'people';
+  const tab = t === 'integrations' || t === 'settings' || t === 'agents' ? t : 'people';
 
   const load = useCallback(() => {
     api.get<Directory>('/api/admin/directory').then(setDir);
@@ -132,6 +133,9 @@ export function Admin() {
           <button className={tab === 'integrations' ? 'on' : ''} onClick={() => setParams({ tab: 'integrations' })}>
             {Icons.plug} Integrations
           </button>
+          <button className={tab === 'agents' ? 'on' : ''} onClick={() => setParams({ tab: 'agents' })}>
+            {Icons.plug} AI agents
+          </button>
           <button className={tab === 'settings' ? 'on' : ''} onClick={() => setParams({ tab: 'settings' })}>
             {Icons.settings} Settings
           </button>
@@ -140,6 +144,8 @@ export function Admin() {
       <main className="dash-main">
         {tab === 'settings' ? (
           <AdminSettings onChanged={load} />
+        ) : tab === 'agents' ? (
+          <AdminAgents />
         ) : tab === 'integrations' ? (
           <AdminIntegrations onChanged={load} />
         ) : (

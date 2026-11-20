@@ -180,6 +180,8 @@ A yellow banner reminds everyone this server is temporary. **Export early and of
 - In the room: **Export room** (top bar or the banner). Choose a passphrase (at least 10 characters). The file downloads to your computer, and its SHA-256 is shown and recorded on the timeline.
 - On the server, every room at once: `bash warroom-now.sh export`.
 
+**AI agents.** To let an agent such as Claude Code help (catch-up summaries, filling in the IOC tracker), anyone in the room opens **AI agents** in the room header and creates a key for their own agent: it acts as them, works in that one war room for 2 to 72 hours, and stops when the incident is resolved. The dialog shows the `claude mcp add` command to paste. Guests can do the same when you tick **May connect an AI agent** in their access. You can see and disconnect every agent from the same dialog. See [AI agents](wiki/AI-Agents.md).
+
 ---
 
 ## 5. Tear it down

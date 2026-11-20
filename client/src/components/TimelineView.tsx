@@ -5,6 +5,7 @@ import { getSocket } from '../lib/socket';
 import { localTime, utcTime } from '../lib/format';
 import type { IncidentState, TimelineEntry } from '../types';
 import { Icons } from './ui';
+import { AgentTag } from './Agents';
 
 const HUMAN = new Set(['note', 'decision', 'action', 'finding', 'pin']);
 const PEOPLE = new Set(['joined', 'presence', 'guest', 'access']);
@@ -134,6 +135,7 @@ export function TimelineView({ state, onOpenChannel }: { state: IncidentState; o
                   <span className={`tl-type t-${e.type}`}>{TYPE_LABEL[e.type] ?? e.type}</span>
                   <span className="tl-text">{e.text}</span>
                   <span className="muted small">{e.displayName ? ` — ${e.displayName}` : ''}</span>
+                  {e.agent && <AgentTag name={e.agent} person={e.displayName} />}
                   {e.ref?.channelId && state.channels.some((c) => c.id === e.ref!.channelId) && (
                     <button className="link-btn small" onClick={() => onOpenChannel(e.ref!.channelId!)}>
                       view in chat

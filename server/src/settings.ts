@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
-export type SectionId = 'general' | 'okta' | 'entra' | 'scim' | 'email' | 'voice';
+export type SectionId = 'general' | 'okta' | 'entra' | 'scim' | 'email' | 'voice' | 'agents';
 type Kind = 'string' | 'url' | 'number' | 'bool' | 'enum' | 'list' | 'text' | 'secret';
 
 interface Field {
@@ -213,6 +213,44 @@ export const FIELDS: Field[] = [
     base: () => envDefaults.livekit.apiSecret, apply: (v) => (config.livekit.apiSecret = v),
     readOnly: () => (bundledLiveKit() ? 'Managed automatically for the LiveKit server that ships with War Room.' : null),
   },
+
+  // ---- AI agents (MCP)
+  {
+    key: 'agents.enabled', section: 'agents', kind: 'bool', env: ['MCP_ENABLED'],
+    label: 'Allow AI agents',
+    help: 'Agents connect to the MCP address below and act for the person who approved them, never with more access than that person. They can’t change roles, invite people or moderate. Turning this off disconnects every agent at once.',
+    base: () => envDefaults.agents.enabled, apply: (v) => (config.agents.enabled = Boolean(v)),
+  },
+  {
+    key: 'agents.roomKeys', section: 'agents', kind: 'bool', env: ['MCP_ROOM_KEYS'],
+    label: 'Room agent keys',
+    help: 'The Incident Commander and room admins can issue a key that gives an agent access to one war room for a few hours. Simplest for command-line agents; the key is a secret, so keep lifetimes short.',
+    base: () => envDefaults.agents.roomKeys, apply: (v) => (config.agents.roomKeys = Boolean(v)),
+  },
+  {
+    key: 'agents.selfKeys', section: 'agents', kind: 'enum', env: ['MCP_SELF_KEYS'],
+    label: 'Who can create a room agent key',
+    help: 'Each person creates their own key in the war room; it acts as them, with their access. Guests also need the Incident Commander or a room admin to allow it in their guest access.',
+    options: [
+      { value: 'everyone', label: 'Responders, and guests the room allows' },
+      { value: 'responders', label: 'Responders only' },
+      { value: 'controllers', label: 'Only the Incident Commander, room admins and admins' },
+    ],
+    showIf: { key: 'agents.roomKeys', in: ['true'] },
+    base: () => envDefaults.agents.selfKeys, apply: (v) => (config.agents.selfKeys = v),
+  },
+  {
+    key: 'agents.grantDays', section: 'agents', kind: 'number', min: 1, max: 90, env: ['MCP_GRANT_DAYS'],
+    label: 'Agent sign-in lasts (days)',
+    help: 'How long an agent connected through sign-in (OAuth) keeps access before the person approves it again.',
+    base: () => envDefaults.agents.grantDays, apply: (v) => (config.agents.grantDays = v),
+  },
+  {
+    key: 'agents.dynamicClients', section: 'agents', kind: 'bool', env: ['MCP_DYNAMIC_CLIENTS'],
+    label: 'Let agent apps register themselves',
+    help: 'MCP clients such as Claude register automatically (OAuth dynamic client registration) before asking someone to approve them. Turn off to allow only room keys.',
+    base: () => envDefaults.agents.dynamicClients, apply: (v) => (config.agents.dynamicClients = Boolean(v)),
+  },
 ];
 
 const byKey = new Map(FIELDS.map((f) => [f.key, f]));
@@ -224,6 +262,7 @@ export const SECTIONS: { id: SectionId; label: string; description: string }[] =
   { id: 'scim', label: 'Provisioning (SCIM)', description: 'Let Okta or Entra create, update and deactivate accounts.' },
   { id: 'email', label: 'Email', description: 'SMTP for guest sign-in codes.' },
   { id: 'voice', label: 'Voice (LiveKit)', description: 'The media server for voice rooms and screen share.' },
+  { id: 'agents', label: 'AI agents (MCP)', description: 'Let AI agents such as Claude read and work in war rooms, on behalf of a person.' },
 ];
 
 // ---------- storage ----------
@@ -405,6 +444,8 @@ function sectionStatus(id: SectionId) {
       return config.smtp.host && config.smtp.from ? 'on' : config.smtp.host ? 'incomplete' : 'off';
     case 'voice':
       return config.livekit.url && config.livekit.apiKey && config.livekit.apiSecret ? 'on' : 'incomplete';
+    case 'agents':
+      return config.agents.enabled ? 'on' : 'off';
     default:
       return 'on';
   }
@@ -427,6 +468,8 @@ function sectionInfo(id: SectionId) {
     }
     case 'scim':
       return [{ label: 'SCIM base URL', value: `${base}/scim/v2` }];
+    case 'agents':
+      return [{ label: 'MCP server address', value: `${base}/mcp` }];
     default:
       return [];
   }

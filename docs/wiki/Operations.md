@@ -95,6 +95,7 @@ Full guide: [War Room NOW](../WARROOM_NOW.md).
 | Codes aren't arriving | Settings → Email → **Test**, then Integrations → **Send test email**; check spam. Meanwhile hand out codes from the room (**New code**, **New sign-in code**). |
 | Sign-in fails after an IdP change | Settings → Okta / Entra → **Test**. For SAML, check the certificate's expiry. Locked out: use a recovery link. |
 | Moderation (mute, move, remove) fails | Settings → Voice → **Test**; the server must reach LiveKit's API address. |
+| Claude can't connect to War Room | Claude connects from the internet: the public address must be HTTPS and reachable from outside. On a private network use Claude Code or a room agent key. See [AI agents](AI-Agents.md). |
 | Anything else | `docker compose logs app` |
 
 Next: [Security model](Security-Model.md).

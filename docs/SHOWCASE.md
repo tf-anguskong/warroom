@@ -95,6 +95,12 @@ Sign in with **Okta** or **Microsoft Entra ID** (OIDC or SAML), with **SCIM** pr
 
 ![Admin settings for Okta sign-in](images/admin-settings.png)
 
+### Bring your AI agents
+
+War Room has a built-in **MCP server**, so agents such as **Claude** can catch up on an incident, draft status updates, pull indicators into the tracker or run searches. An agent acts for one person, with no more access than they have, never runs the room, and everything it does is marked *via Claude*. People connect with their normal sign-in; temporary War Rooms can hand an agent a key for one room.
+
+![Approving Claude to work in War Room](images/agent-consent.png)
+
 ---
 
 ## Built for security teams

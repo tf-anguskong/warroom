@@ -10,6 +10,7 @@ import { Dashboard } from './pages/Dashboard';
 import { IncidentRoom } from './pages/IncidentRoom';
 import { Admin } from './pages/Admin';
 import { Start } from './pages/Start';
+import { Connect } from './pages/Connect';
 import './styles.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -20,6 +21,7 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/join/:token" element={<Join />} />
         <Route path="/ask/:id" element={<Ask />} />
         <Route path="/setup/:token" element={<Setup />} />
+        <Route path="/connect/:id" element={<Connect />} />
         <Route
           path="/*"
           element={

@@ -4570,3 +4570,179 @@ tr.alert-detail .codeblock {
 .people.offline li > :not(.person-actions) {
   opacity: 0.6;
 }
+
+/* ---------- AI agents (MCP) ---------- */
+.agent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  background: color-mix(in srgb, var(--c-teal) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--c-teal) 70%, transparent);
+  border-radius: 3px;
+  padding: 0 5px;
+  vertical-align: 1px;
+  white-space: nowrap;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cmd-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.cmd-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  min-width: 0;
+}
+.cmd-row pre {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 8px 10px;
+  font-size: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 220px;
+  overflow: auto;
+}
+.agent-help {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.agent-help details {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+}
+.agent-help summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.agent-help details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agent-help details p {
+  margin: 6px 0 0;
+}
+.modal section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.modal section h3 {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+.agent-key-form {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.agent-key-form:disabled {
+  opacity: 0.6;
+}
+.agent-key-form .btn {
+  align-self: flex-start;
+}
+.agent-scopes {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.readonly-why {
+  padding: 6px 10px;
+  border-left: 3px solid var(--warn);
+  background: var(--bg-elev2);
+  border-radius: var(--radius-sm);
+}
+.agent-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.agent-list li {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev2);
+}
+.agent-list li.ended {
+  opacity: 0.6;
+}
+.agent-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+.agent-list .agent-tag {
+  margin-left: 4px;
+}
+.connect-card {
+  max-width: 500px;
+}
+.connect-card .scope-group label.check {
+  align-items: flex-start;
+}
+.connect-card label.check.disabled {
+  opacity: 0.55;
+}
+.connect-card select {
+  margin-top: 4px;
+}
+.connect-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.admin-agents {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.admin-agents h2 {
+  font-size: 16px;
+  margin: 8px 0 0;
+}
+
+.agent-tag svg {
+  width: 11px;
+  height: 11px;
+  flex: none;
+}
+/* Written by someone's AI agent: a quiet teal edge so it reads differently from the person's own words. */
+.msg.by-agent {
+  box-shadow: inset 2px 0 0 color-mix(in srgb, var(--c-teal) 70%, transparent);
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}

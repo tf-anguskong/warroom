@@ -8,6 +8,7 @@ Read **[CLAUDE.md](CLAUDE.md)** before changing code. It has the commands, the l
 - `npm install`, `npm run livekit:dev`, `npm run dev`, then open http://localhost:5173 (developer sign-in is on in dev). Check work with `npm run build` and an end-to-end run.
 - Server configuration lives in **Admin → Settings** (`server/src/settings.ts`), not in `.env`. New settings are fields there; read `config` live, and reset cached clients in `onSettingsChanged`.
 - Guests are deny-by-default: new API routes and realtime events are closed to guests unless explicitly allowed in `server/src/guests.ts` / `realtime.ts`.
+- AI agents (the MCP server at `/mcp`) are deny-by-default as well: bearer-token requests reach only routes in `AGENT_RULES` (`server/src/agents.ts`), and never get room control.
 - Secrets are encrypted at rest and never sent to browsers or written to logs.
 - When screens change, update `docs/CLAUDE_DESIGN_PROMPT.md`; when setup or settings change, update the README.
 - Never commit `.env`, `server/data/`, or keys, certificates and tokens.

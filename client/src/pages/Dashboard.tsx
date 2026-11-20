@@ -6,6 +6,7 @@ import { getSocket } from '../lib/socket';
 import { duration } from '../lib/format';
 import { Icons, Modal, SeverityBadge, StatusPill } from '../components/ui';
 import { ImportRoomDialog, QuickBanner } from '../components/Archive';
+import { MyAgentsDialog } from '../components/Agents';
 import type { IncidentListItem, Severity } from '../types';
 
 export function Dashboard() {
@@ -20,6 +21,7 @@ function DashboardInner() {
   const [incidents, setIncidents] = useState<IncidentListItem[] | null>(null);
   const [declaring, setDeclaring] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [agents, setAgents] = useState(false);
   const [, setTick] = useState(0);
 
   const load = useCallback(() => {
@@ -57,6 +59,10 @@ function DashboardInner() {
             {Icons.settings} Admin
           </Link>
         )}
+        <button className="btn ghost sm" onClick={() => setAgents(true)} title="AI agents (such as Claude) connected for you, and how to connect one">
+          {Icons.plug} AI agents
+        </button>
+        {agents && <MyAgentsDialog onClose={() => setAgents(false)} />}
         <span className="muted">{me.displayName}</span>
         <button className="btn ghost sm" onClick={logout}>
           Sign out

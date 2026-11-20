@@ -61,4 +61,6 @@ Okta watches and tracked endpoints stop when the incident is resolved or the int
 
 Stored encrypted with AES-256-GCM, using a key derived from the server's generated session secret (or `INTEGRATIONS_KEY` if set), and never returned to browsers.
 
-Next: [Operations](Operations.md).
+AI agents can run these searches too, if the person approving them allows it; see [AI agents](AI-Agents.md).
+
+Next: [AI agents (MCP)](AI-Agents.md).

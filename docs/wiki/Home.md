@@ -15,6 +15,7 @@ This wiki explains each feature and setting in depth. For a short overview with 
 | [Sign-in and provisioning](Sign-in-and-Provisioning.md) | Okta, Entra ID (OIDC and SAML), SCIM, sign-in with an emailed code, how accounts are matched, admins |
 | [Settings reference](Settings-Reference.md) | Every field in Admin → Settings, and the few environment variables that remain |
 | [Integrations](Integrations.md) | Okta, Sumo Logic and CrowdStrike in the Investigate view, live watches, tracked endpoints, who can search |
+| [AI agents (MCP)](AI-Agents.md) | Connecting Claude and other agents with sign-in or a room key, the tools they get, who sees and disconnects them, security |
 | [Operations](Operations.md) | Docker deployment, ports and DNS, backups, moving rooms between servers, setup and recovery links, upgrades, troubleshooting |
 | [Security model](Security-Model.md) | What's protected and how: guests, sign-in, codes and links, files, secrets, audit trail, known limits |
 
@@ -29,6 +30,7 @@ This wiki explains each feature and setting in depth. For a short overview with 
 | **Responder** | A full member of your team with a War Room account. Sees the whole room. |
 | **Guest** | Someone from outside (vendor, outside IR firm, counsel) who sees only what their invite grants, for a limited time. |
 | **Main Bridge** / **breakout** | The incident's main voice room, and any extra voice rooms. |
+| **AI agent** | An app such as Claude connected over MCP. It acts for one person, and what it writes shows that person's name with an *AI agent* tag. |
 | **War Room NOW** | A temporary War Room for one incident, with no identity provider (`WARROOM_MODE=now`). |
 
 ## Other documents

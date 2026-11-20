@@ -69,6 +69,18 @@ Send a test email from **Admin → Integrations → Email (SMTP)**. In developme
 | LiveKit address for the server (optional) | Used to mute, move and remove people. Empty uses the browser address. | `LIVEKIT_API_URL` |
 | API key / API secret | Managed automatically with the bundled LiveKit. | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
 
+## AI agents (MCP)
+
+| Setting | What it does | Default / env |
+|---|---|---|
+| Allow AI agents | Agents connect at `https://<public address>/mcp` and act for the person who approved them. Off disconnects every agent. | on · `MCP_ENABLED` |
+| Room agent keys | People can create a key for their own agent in one war room, for a few hours. Off stops existing keys too. | on · `MCP_ROOM_KEYS` |
+| Who can create a room agent key | Responders and guests the room allows (`everyone`), responders only (`responders`), or only the IC, room admins and admins (`controllers`). | `everyone` · `MCP_SELF_KEYS` |
+| Agent sign-in lasts (days) | How long an OAuth approval lasts before the person approves it again (1–90). | 30 · `MCP_GRANT_DAYS` |
+| Let agent apps register themselves | OAuth dynamic client registration (Claude uses it). Off leaves only room keys. | on · `MCP_DYNAMIC_CLIENTS` |
+
+The section shows the MCP address to give agents. See [AI agents](AI-Agents.md).
+
 ## What stays in the environment
 
 Only process-level values: `PORT`, `DATA_DIR`, `NODE_ENV`, `CLIENT_DIST`, `LIVEKIT_KEY_FILE`, the optional `SESSION_SECRET` and `INTEGRATIONS_KEY` overrides, and `WARROOM_MODE=now` for a temporary War Room. Server keys (session signing, encryption) are generated into the data directory on first start.

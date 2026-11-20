@@ -22,6 +22,7 @@ export interface Scope {
   sheets: string[];
   notes: string[];
   timeline: boolean;
+  agents: boolean;
 }
 const toIds = (s?: GuestScopeSummary): Scope => ({
   channels: s?.channels.map((c) => c.id) ?? [],
@@ -29,6 +30,7 @@ const toIds = (s?: GuestScopeSummary): Scope => ({
   sheets: s?.sheets.map((x) => x.id) ?? [],
   notes: s?.notes?.map((x) => x.id) ?? [],
   timeline: s?.timeline ?? false,
+  agents: s?.agents ?? false,
 });
 
 /** Checklist of what a guest can see. Nothing is included unless ticked. */
@@ -58,6 +60,9 @@ export function ScopePicker({ state, scope, onChange }: { state: IncidentState; 
         <label className="check">
           <input type="checkbox" checked={scope.timeline} onChange={(e) => onChange({ ...scope, timeline: e.target.checked })} /> Incident timeline (read and add notes)
         </label>
+        <label className="check" title="The guest can create a room agent key for their own AI agent. It acts as them and sees only what's ticked here.">
+          <input type="checkbox" checked={scope.agents} onChange={(e) => onChange({ ...scope, agents: e.target.checked })} /> May connect an AI agent (only to what’s ticked here)
+        </label>
       </fieldset>
     </div>
   );
@@ -85,7 +90,7 @@ export function InviteDialog({ state, onClose }: { state: IncidentState; onClose
   const [note, setNote] = useState('');
   const [linkHours, setLinkHours] = useState(24);
   const [accessHours, setAccessHours] = useState(12);
-  const [scope, setScope] = useState<Scope>({ channels: general ? [general.id] : [], voiceRooms: main ? [main.id] : [], sheets: [], notes: [], timeline: false });
+  const [scope, setScope] = useState<Scope>({ channels: general ? [general.id] : [], voiceRooms: main ? [main.id] : [], sheets: [], notes: [], timeline: false, agents: false });
   const [created, setCreated] = useState<{ url: string; expiresAt: string; code: string | null } | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -387,7 +392,7 @@ export function GuestsSection({ state }: { state: IncidentState }) {
             </div>
             {g.scope && (
               <div className="guest-scope small">
-                {[...g.scope.channels.map((c) => `#${c.name}`), ...g.scope.voiceRooms.map((v) => v.name), ...g.scope.sheets.map((x) => x.name), ...(g.scope.notes ?? []).map((x) => x.name), ...(g.scope.timeline ? ['Timeline'] : [])].join(' · ') ||
+                {[...g.scope.channels.map((c) => `#${c.name}`), ...g.scope.voiceRooms.map((v) => v.name), ...g.scope.sheets.map((x) => x.name), ...(g.scope.notes ?? []).map((x) => x.name), ...(g.scope.timeline ? ['Timeline'] : []), ...(g.scope.agents ? ['AI agent allowed'] : [])].join(' · ') ||
                   'No access'}
               </div>
             )}

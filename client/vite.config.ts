@@ -11,6 +11,10 @@ export default defineConfig({
       '/api': target,
       '/auth': target,
       '/scim': target,
+      // AI agents: OAuth for MCP clients, and the MCP server.
+      '/oauth': target,
+      '/mcp': target,
+      '/.well-known': target,
       '/socket.io': { target, ws: true },
     },
   },

@@ -234,7 +234,7 @@ joinRequestsRouter.post(
     const kind = req.body?.kind === 'member' ? 'member' : 'guest';
     if (kind === 'member' && !(await canInviteMembers(user, inc.id))) throw new HttpError(403, 'You can’t let people in as responders here');
     if (kind === 'member' && unverifiedMemberBlock(user)) throw new HttpError(403, unverifiedMemberBlock(user)!);
-    const scope = kind === 'member' ? { channels: [], voiceRooms: [], sheets: [], notes: [], timeline: false } : cleanScope(inc.id, req.body?.scope);
+    const scope = kind === 'member' ? { channels: [], voiceRooms: [], sheets: [], notes: [], timeline: false, agents: false } : cleanScope(inc.id, req.body?.scope);
     if (kind === 'guest' && !scope.channels.length && !scope.voiceRooms.length && !scope.sheets.length && !scope.notes.length) {
       throw new HttpError(400, 'Give the guest access to at least one channel, voice room, sheet or note');
     }

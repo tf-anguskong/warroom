@@ -26,6 +26,7 @@ import { notesFor, notesForExport } from './notes.js';
 import { attachmentsOf, attachToMessage, filesForExport, pendingUploads } from './files.js';
 import { shiftsForExport, shiftsOf } from './shifts.js';
 import { linkedProviders, providerLabel, ssoProviders } from './sso.js';
+import { currentAgent } from './agent-context.js';
 
 interface IncidentRow {
   id: string;
@@ -68,6 +69,7 @@ interface MessageRow {
   created_at: string;
   edited_at: string | null;
   display_name?: string | null;
+  agent?: string | null;
 }
 
 export const api = Router();
@@ -134,6 +136,8 @@ function serializeMessage(m: MessageRow) {
     channelId: m.channel_id,
     userId: m.user_id,
     displayName: m.display_name ?? (m.user_id ? getUser(m.user_id)?.display_name : null) ?? 'System',
+    /** Set when an AI agent posted this for the person. */
+    agent: m.agent ?? null,
     body: m.body,
     kind: m.kind,
     pinned: Boolean(m.pinned),
@@ -159,8 +163,11 @@ export function addTimeline(
   ts = now(),
 ) {
   const id = newId();
+  // Done by an AI agent for this person (only when it's that person's own entry).
+  const agent = currentAgent();
+  const agentName = agent && userId === agent.userId ? agent.name : null;
   q.run(
-    'INSERT INTO timeline (id, incident_id, ts, user_id, type, text, ref) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO timeline (id, incident_id, ts, user_id, type, text, ref, agent) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     id,
     incidentId,
     ts,
@@ -168,6 +175,7 @@ export function addTimeline(
     type,
     text,
     ref ? JSON.stringify(ref) : null,
+    agentName,
   );
   const entry = {
     id,
@@ -175,6 +183,7 @@ export function addTimeline(
     ts,
     userId,
     displayName: userId ? getUser(userId)?.display_name ?? null : null,
+    agent: agentName,
     type,
     text,
     ref,
@@ -189,14 +198,16 @@ export function addTimeline(
  */
 export function postMessage(channelId: string, userId: string | null, body: string, kind = 'msg', incidentId?: string, attachments: string[] = []) {
   const id = newId();
+  const agent = currentAgent();
   q.run(
-    'INSERT INTO messages (id, channel_id, user_id, body, kind, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO messages (id, channel_id, user_id, body, kind, created_at, agent) VALUES (?, ?, ?, ?, ?, ?, ?)',
     id,
     channelId,
     userId,
     body,
     kind,
     now(),
+    agent && userId === agent.userId ? agent.name : null,
   );
   if (kind === 'msg' && userId) recordMentions(id, channelId, userId, body, incidentId);
   if (attachments.length && userId) attachToMessage(id, channelId, userId, attachments);
@@ -237,7 +248,8 @@ function recordMentions(messageId: string, channelId: string, authorId: string, 
       channelName: ch.name,
       incidentId,
       incidentKey: incidentKey(inc.number),
-      by: author?.display_name ?? 'Someone',
+      // An agent's message notifies as "Alice's AI agent (Claude)", never as Alice herself.
+      by: currentAgent() ? `${author?.display_name ?? 'Someone'}’s AI agent (${currentAgent()!.name})` : author?.display_name ?? 'Someone',
       preview,
     });
   }
@@ -272,7 +284,8 @@ const commanderId = (incidentId: string) =>
  * (IC unassigned, no room admins), anyone in the room can act so the room is never locked.
  */
 export function canControl(user: UserRow, incidentId: string) {
-  if (user.is_guest) return false;
+  // AI agents never run the room, whoever they work for.
+  if (user.is_guest || currentAgent()) return false;
   if (isAdmin(user)) return true;
   const ic = commanderId(incidentId);
   const admins = roomAdminIds(incidentId);
@@ -298,6 +311,8 @@ function voiceTarget(incidentId: string, userId: string) {
 }
 
 function markMember(incidentId: string, user: UserRow) {
+  // An agent reading the room isn't the person joining it.
+  if (currentAgent()) return;
   const r = q.run(
     'INSERT OR IGNORE INTO incident_members (incident_id, user_id, joined_at) VALUES (?, ?, ?)',
     incidentId,
@@ -357,7 +372,9 @@ api.get(
       .all<IncidentRow>(
         `SELECT * FROM incidents ${where} ORDER BY CASE WHEN status = 'resolved' THEN 1 ELSE 0 END, severity, created_at DESC`,
       )
-      .filter((i) => !req.user!.is_guest || i.id === req.user!.guest_incident_id);
+      .filter((i) => !req.user!.is_guest || i.id === req.user!.guest_incident_id)
+      // An agent given one war room doesn't see the others.
+      .filter((i) => !currentAgent()?.incidentId || i.id === currentAgent()!.incidentId);
     const counts = activeCounts();
     return {
       incidents: rows.map((i) => {
@@ -1369,7 +1386,7 @@ api.get(
   '/incidents/:id/timeline',
   h((req) => {
     const inc = mustIncident(req.params.id);
-    const rows = q.all<{ id: string; ts: string; user_id: string | null; type: string; text: string; ref: string | null; display_name: string | null }>(
+    const rows = q.all<{ id: string; ts: string; user_id: string | null; type: string; text: string; ref: string | null; display_name: string | null; agent: string | null }>(
       `SELECT t.*, u.display_name FROM timeline t LEFT JOIN users u ON u.id = t.user_id
        WHERE t.incident_id = ? ORDER BY t.ts`,
       inc.id,
@@ -1381,6 +1398,7 @@ api.get(
         ts: r.ts,
         userId: r.user_id,
         displayName: r.display_name,
+        agent: r.agent,
         type: r.type,
         text: r.text,
         ref: r.ref ? JSON.parse(r.ref) : null,
@@ -1466,13 +1484,13 @@ api.get(
       lines.push('');
     }
     lines.push('## Timeline (UTC)', '', '| Time | Type | Entry | By |', '|---|---|---|---|');
-    const rows = q.all<{ ts: string; type: string; text: string; display_name: string | null }>(
-      'SELECT t.ts, t.type, t.text, u.display_name FROM timeline t LEFT JOIN users u ON u.id = t.user_id WHERE t.incident_id = ? ORDER BY t.ts',
+    const rows = q.all<{ ts: string; type: string; text: string; display_name: string | null; agent: string | null }>(
+      'SELECT t.ts, t.type, t.text, t.agent, u.display_name FROM timeline t LEFT JOIN users u ON u.id = t.user_id WHERE t.incident_id = ? ORDER BY t.ts',
       inc.id,
     );
     const cell = (s: string) => s.replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
     for (const r of rows) {
-      lines.push(`| ${r.ts.replace("T", " ").slice(0, 19)} | ${r.type} | ${cell(mentionsToText(r.text))} | ${r.display_name ?? ''} |`);
+      lines.push(`| ${r.ts.replace("T", " ").slice(0, 19)} | ${r.type} | ${cell(mentionsToText(r.text))} | ${r.display_name ?? ''}${r.agent ? ` (via ${cell(r.agent)})` : ''} |`);
     }
     const pins = q.all<MessageRow>(
       `SELECT m.*, u.display_name FROM messages m LEFT JOIN users u ON u.id = m.user_id
@@ -1488,7 +1506,7 @@ api.get(
     if (pins.length) {
       lines.push('', '## Pinned messages', '');
       for (const p of pins) {
-        lines.push(`> **${p.display_name ?? 'System'}** (${p.created_at.slice(0, 19).replace('T', ' ')} UTC)`, '>');
+        lines.push(`> **${p.display_name ?? 'System'}**${p.agent ? ` via ${p.agent}` : ''} (${p.created_at.slice(0, 19).replace('T', ' ')} UTC)`, '>');
         lines.push(...mentionsToText(p.body).split('\n').map((l) => `> ${l}`), '');
       }
     }

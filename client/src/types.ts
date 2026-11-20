@@ -19,6 +19,7 @@ export interface GuestScopeSummary {
   sheets: { id: string; name: string }[];
   notes: { id: string; name: string }[];
   timeline: boolean;
+  agents?: boolean;
 }
 
 export interface Guest extends User {
@@ -142,6 +143,8 @@ export interface Message {
   channelId: string;
   userId: string | null;
   displayName: string;
+  /** The AI agent that posted this for the person, if one did. */
+  agent?: string | null;
   body: string;
   kind: 'msg' | 'system';
   pinned: boolean;
@@ -184,6 +187,7 @@ export interface TimelineEntry {
   ts: string;
   userId: string | null;
   displayName: string | null;
+  agent?: string | null;
   type: string;
   text: string;
   ref: { messageId?: string; channelId?: string } | null;

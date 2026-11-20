@@ -9,6 +9,7 @@ import { ExportRoomDialog } from './Archive';
 import { AwayButton } from './Away';
 import { SoundToggle } from './SoundToggle';
 import { InviteDialog } from './Guests';
+import { RoomAgentsDialog } from './Agents';
 
 export function RoomHeader({ state }: { state: IncidentState }) {
   const { meta, toast, userById, me } = useApp();
@@ -16,6 +17,7 @@ export function RoomHeader({ state }: { state: IncidentState }) {
   const [now, setNow] = useState(Date.now());
   const [exporting, setExporting] = useState(false);
   const [inviting, setInviting] = useState(false);
+  const [agents, setAgents] = useState(false);
   const [editing, setEditing] = useState(false);
   const [title, setTitle] = useState(inc.title);
 
@@ -132,6 +134,10 @@ export function RoomHeader({ state }: { state: IncidentState }) {
         </button>
       )}
       {inviting && <InviteDialog state={state} onClose={() => setInviting(false)} />}
+      <button className="btn ghost sm" onClick={() => setAgents(true)} title="Connect an AI agent such as Claude to this war room (MCP)">
+        {Icons.plug} AI agents
+      </button>
+      {agents && <RoomAgentsDialog state={state} onClose={() => setAgents(false)} />}
       {!me.isGuest && (state.canControl || me.isAdmin) && (
         <button className="btn ghost sm" onClick={() => setExporting(true)} title="Export the whole room to an archive you can restore on any War Room">
           {Icons.download} Export room

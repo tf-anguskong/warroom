@@ -9,6 +9,8 @@ import { guestAllowed, guestSessionValid } from './guests.js';
 import { onSettingsChanged } from './settings.js';
 import { emailCanSend, emailLoginEnabled } from './email-login.js';
 import { getProvider, resolveSsoUser, ssoProviders, type ProviderId, type SsoIdentity, type SsoProvider } from './sso.js';
+import { authenticateAgent } from './agents.js';
+import { agentStore } from './agent-context.js';
 
 const SESSION_COOKIE = 'wr_session';
 const OIDC_TX_COOKIE = 'wr_oidc';
@@ -97,6 +99,13 @@ export async function startGuestSession(res: Response, user: UserRow, ttlSeconds
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {
+  // AI agents (MCP) send a bearer token: a room key or an OAuth access token. Deny by default.
+  const bearer = req.headers.authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
+  if (bearer) {
+    const agent = authenticateAgent(req, res, bearer);
+    if (!agent) return;
+    return agentStore.run(agent, () => next());
+  }
   const user = await userFromToken(req.cookies?.[SESSION_COOKIE]);
   if (!user) return res.status(401).json({ error: 'unauthenticated' });
   // Guests only reach an allowlist of routes inside their one war room.

@@ -102,7 +102,7 @@ export function JoinRequests({ state }: { state: IncidentState }) {
 function GuestDialog({ state, req, busy, onClose, onAdmit }: { state: IncidentState; req: Req; busy: boolean; onClose: () => void; onAdmit: (s: Scope, h: number) => void }) {
   const main = state.voiceRooms.find((v) => v.kind === 'main');
   const general = state.channels.find((c) => c.name === 'general') ?? state.channels[0];
-  const [scope, setScope] = useState<Scope>({ channels: general ? [general.id] : [], voiceRooms: main ? [main.id] : [], sheets: [], notes: [], timeline: false });
+  const [scope, setScope] = useState<Scope>({ channels: general ? [general.id] : [], voiceRooms: main ? [main.id] : [], sheets: [], notes: [], timeline: false, agents: false });
   const [hours, setHours] = useState(12);
   const nothing = !scope.channels.length && !scope.voiceRooms.length && !scope.sheets.length && !scope.notes.length;
   return (

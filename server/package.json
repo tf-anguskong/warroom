@@ -11,6 +11,7 @@
     "room": "tsx src/room-cli.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@node-saml/node-saml": "^5.2.0",
     "cookie-parser": "^1.4.7",
     "express": "^4.21.2",
@@ -19,7 +20,8 @@
     "nodemailer": "^10.6.0",
     "openid-client": "^6.1.7",
     "socket.io": "^4.8.1",
-    "tar": "^7.4.3"
+    "tar": "^7.4.3",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/cookie-parser": "^1.4.8",

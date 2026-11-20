@@ -20,9 +20,11 @@ export interface GuestScope {
   sheets: string[];
   notes: string[];
   timeline: boolean;
+  /** May connect an AI agent (MCP) with their own room key, limited to this same access. */
+  agents: boolean;
 }
 
-const EMPTY: GuestScope = { channels: [], voiceRooms: [], sheets: [], notes: [], timeline: false };
+const EMPTY: GuestScope = { channels: [], voiceRooms: [], sheets: [], notes: [], timeline: false, agents: false };
 
 export function parseScope(raw: string | null | undefined): GuestScope {
   try {
@@ -33,6 +35,7 @@ export function parseScope(raw: string | null | undefined): GuestScope {
       sheets: Array.isArray(s.sheets) ? s.sheets.map(String) : [],
       notes: Array.isArray(s.notes) ? s.notes.map(String) : [],
       timeline: s.timeline === true,
+      agents: s.agents === true,
     };
   } catch {
     return { ...EMPTY };
@@ -53,6 +56,7 @@ export function cleanScope(incidentId: string, raw: unknown): GuestScope {
     sheets: [...new Set(s.sheets)].filter((x) => sheets.has(x)),
     notes: [...new Set(s.notes)].filter((x) => notes.has(x)),
     timeline: s.timeline,
+    agents: s.agents,
   };
 }
 
@@ -115,6 +119,10 @@ const RULES: Rule[] = [
   ['PUT', new RegExp(`^/api/sheets/${ID}/cells$`), (u, inc, m) => lookup.sheetIncident(m[1]) === inc && canSee(u, inc, 'sheet', m[1])],
   ['POST', new RegExp(`^/api/sheets/${ID}/rows$`), (u, inc, m) => lookup.sheetIncident(m[1]) === inc && canSee(u, inc, 'sheet', m[1])],
   ['DELETE', new RegExp(`^/api/sheets/${ID}/rows/[^/]+$`), (u, inc, m) => lookup.sheetIncident(m[1]) === inc && canSee(u, inc, 'sheet', m[1])],
+  // Their own AI agent, if the room allowed it (agents.ts checks the rest; a guest only sees and ends their own keys).
+  ['GET', new RegExp(`^/api/incidents/${ID}/agents$`), (_u, inc, m) => m[1] === inc],
+  ['POST', new RegExp(`^/api/incidents/${ID}/agent-keys$`), (u, inc, m) => m[1] === inc && parseScope(u.guest_scope).agents],
+  ['DELETE', new RegExp(`^/api/agent-grants/${ID}$`), () => true],
 ];
 
 /** Whether a guest may make this request. Anything not listed is refused. */
@@ -178,6 +186,7 @@ function scopeSummary(incidentId: string, s: GuestScope) {
     sheets: s.sheets.map((x) => ({ id: x, name: name('SELECT name FROM sheets WHERE id = ?', x) ?? 'sheet' })),
     notes: s.notes.map((x) => ({ id: x, name: name('SELECT name FROM notes WHERE id = ?', x) ?? 'note' })),
     timeline: s.timeline,
+    agents: s.agents,
     incidentId,
   };
 }
@@ -195,6 +204,8 @@ export async function revokeGuest(userId: string, actorId: string | null, reason
   await Promise.all(rooms.map((r) => livekit().removeParticipant(`warroom-${r.id}`, g.id).catch(() => undefined)));
   const { addTimeline } = await import('./api.js');
   if (g.guest_incident_id) {
+    const { revokeGrantsOf } = await import('./agents.js');
+    revokeGrantsOf(g.id, g.guest_incident_id, actorId ? getUser(actorId) ?? null : null, 'the guest’s access ended');
     addTimeline(g.guest_incident_id, actorId, 'guest', `Guest access ended for ${g.display_name}${g.guest_org ? ` (${g.guest_org})` : ''}: ${reason}`);
     refreshIncident(g.guest_incident_id);
   }
@@ -519,6 +530,10 @@ guestsRouter.put(
     if (!g?.is_guest || g.guest_incident_id !== inc.id) throw new HttpError(404, 'guest not found');
     const scope = cleanScope(inc.id, req.body?.scope);
     updateUser(g.id, { guest_scope: JSON.stringify(scope) });
+    if (!scope.agents) {
+      const { revokeGrantsOf } = await import('./agents.js');
+      revokeGrantsOf(g.id, inc.id, req.user!, 'the guest is no longer allowed to connect an AI agent');
+    }
     const s = scopeSummary(inc.id, scope);
     const { addTimeline } = await import('./api.js');
     addTimeline(
@@ -531,6 +546,7 @@ guestsRouter.put(
         ...s.sheets.map((x) => x.name),
         ...s.notes.map((x) => x.name),
         ...(s.timeline ? ['timeline'] : []),
+        ...(s.agents ? ['may connect an AI agent'] : []),
       ].join(', ') || 'nothing'}`,
     );
     resyncUserChannels(g.id);

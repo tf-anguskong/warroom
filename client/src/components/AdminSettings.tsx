@@ -176,7 +176,7 @@ function SectionForm({ section, view, onSaved }: { section: SectionView; view: S
 
       {section.info.length > 0 && (
         <div className="settings-info">
-          <div className="muted small">Copy these into your identity provider</div>
+          <div className="muted small">{section.id === 'agents' ? 'Give this address to the agent (for example Claude → Add custom connector)' : 'Copy these into your identity provider'}</div>
           {section.info.filter((i) => !i.showIf || i.showIf.in.includes(String(draft[i.showIf.key]))).map((i) => (
             <CopyRow key={i.label} label={i.label} value={i.value} />
           ))}

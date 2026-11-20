@@ -39,6 +39,11 @@ server/src/
   guests.ts       guest invites, scopes, deny-by-default route allowlist, email codes, sweeper
   join-requests.ts  "Ask to join" from the room link (public /auth/rooms routes); admitting makes a normal invite.
                   Requests are short-lived, so they're deliberately not in archives
+  agents.ts       AI agents: OAuth 2.1 server for MCP clients (DCR, PKCE, refresh rotation), room agent keys,
+                  the deny-by-default AGENT_RULES route allowlist, grant lists/revoke. agent-context.ts holds the
+                  AsyncLocalStorage that marks a request as an agent's. Grants are short-lived secrets: not in archives
+  mcp.ts          MCP server at /mcp (Streamable HTTP, stateless); each tool calls this server's own /api with the
+                  agent's token, so every permission check, timeline entry and live update is reused
   mail.ts         nodemailer transport (TLS required), dev outbox
   realtime.ts     Socket.IO: presence, incident rooms, guest-aware broadcast
   mentions.ts     <@user> / <@role:x> / <@here> tokens
@@ -68,6 +73,13 @@ scripts/capture-showcase.mjs   seeds a fictional incident and regenerates docs/i
 - `requireAuth` runs `guestAllowed`. A new `/api` route is closed to guests unless it is added to `RULES` in `guests.ts` with a scope check.
 - Realtime: `emitToIncident` drops events for guests unless they are in `GUEST_EVENTS` or pass a per-socket `canSee` check (`timeline:*`, `sheet:*` with `sheetId`, `note:*` with `noteId`). New events that carry content need that check.
 - Guest users can't be admins, IC or room admins, and lose access when it expires, when the incident resolves, or when it's revoked.
+
+**AI agents are deny-by-default too.**
+- A request with `Authorization: Bearer` is an agent's (room key `wrk_…` or OAuth access token `wra_…`). `requireAuth` resolves it and only routes in `AGENT_RULES` (`agents.ts`) are open, each with a scope (`read`, `write`, `investigate`) and a war room check. New routes stay closed to agents unless added there.
+- Room keys are personal: each acts as the person who created it. Guests may create one only when their scope has `agents: true`; a guest's agent also goes through `guestAllowed`, and its key dies with the guest's access or that flag.
+- `canControl` is always false inside an agent request (`currentAgent()`), so moderation, roles, invites and admin can never be reached by an agent.
+- Messages and timeline entries record `agent` (the agent's name) when an agent made them; show it wherever the author is shown.
+- New MCP tools go in `mcp.ts` and call the REST API through `call()`, never the database directly. Tool output that contains content from people or providers must be labelled as data.
 
 **Identity.**
 - Entra accounts are matched by object ID, then UPN. Never use Entra's `email` claim to find an account (users can edit it). Okta email is trusted.

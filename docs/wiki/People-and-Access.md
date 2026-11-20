@@ -8,6 +8,7 @@ There are two kinds of people in a room, and three ways to get them in.
 |---|---|---|
 | For | Your own team | People outside it: vendors, outside IR firms, counsel |
 | Sees | The whole room | Only the channels, voice rooms, sheets and notes ticked for them, and the timeline if allowed |
+| AI agent | Can connect one | Only if *May connect an AI agent* is ticked; it sees only what the guest sees ([AI agents](AI-Agents.md)) |
 | Account | A War Room account (SSO, or an email address for code sign-in) that lasts | Temporary: ends after 2–72 hours, when the incident is resolved, or when someone ends it |
 | Can | Take roles and tasks; run the room if made IC or room admin | Chat, talk, edit and attach files in what they were given |
 | Marked | Team / title under their name | A **GUEST** tag (with organization) everywhere their name appears |
@@ -98,6 +99,8 @@ Every code is on the timeline and in the activity log.
 | New sign-in code for a guest | (same) | ✓ | ✓ | — |
 | New sign-in code for a responder | — | — | ✓ | — |
 | Admin console, settings, integrations | — | — | ✓ | — |
+| Create a key for their own AI agent | ✓ | ✓ | ✓ | Only if allowed in their access |
+| See and disconnect everyone's agents in the room | — | ✓ | ✓ | — |
 
 \* Each integration can limit searches to role holders and admins, or admins only; see [Integrations](Integrations.md).
 

@@ -58,6 +58,14 @@ War Room holds sensitive material during the worst days of an organisation's yea
 - Responder input is validated and quoted before it goes into a provider query.
 - Every search is on the timeline; who may search is configurable per integration.
 
+## AI agents (MCP)
+
+- An agent acts for **one person**, with no more access than they have, and is marked with its name on everything it does.
+- Requests with an agent token reach only an explicit **allowlist** of routes, checked against what was approved (read, write, searches) and which war room. Agents never get room control, admin or settings.
+- OAuth 2.1 with PKCE, exact redirect URIs, single-use codes and rotating refresh tokens; a replayed code or old refresh token ends the grant. Room keys work in one war room, for at most 72 hours, and stop when it's resolved. Only hashes are stored.
+- Deactivating the person, or ending their sessions, stops their agents. Admins can turn agents off entirely.
+- Agents are told to treat war room content as data, but **prompt injection** is possible: approve write access only when needed. Details: [AI agents](AI-Agents.md).
+
 ## Known limits
 
 - **Every organisation user can open every incident.** Restricted, need-to-know incidents (for example insider-threat cases) are not implemented yet.

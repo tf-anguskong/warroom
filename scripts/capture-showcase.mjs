@@ -285,6 +285,15 @@ await present('marcus', exec.id);
 await present('elena', null);
 await wait(500);
 
+// An AI agent (Claude, connected with a room key) posts a catch-up for latecomers.
+const agentKey = (await jordan('POST', `/api/incidents/${I}/agent-keys`, { name: 'Claude', scopes: ['write'], hours: 12 })).data.key;
+const agent = async (method, path, body) =>
+  fetch(`${BASE}${path}`, { method, headers: { authorization: `Bearer ${agentKey}`, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+await agent('POST', `/api/channels/${g.id}/messages`, {
+  incidentId: I,
+  body: 'Catch-up for anyone joining: FIN-FS01 and FIN-FS02 encrypted (.lockbit), both isolated at 09:42 UTC, EDR containment on 14 hosts. Initial access looks like j.miller’s VPN account (now disabled). 02:00 UTC backups verified clean; FIN-FS01 restore under way. Open: lateral movement hunt (Priya), C2 blocking (Sam), staff statement (Marcus).',
+});
+
 // Make it look like it's been running for a while: incidents opened earlier, chat spread out.
 {
   const { DatabaseSync } = await import('node:sqlite');
@@ -374,6 +383,21 @@ if (want('admin')) {
   await shot('admin-settings');
 }
 if (want('people')) (await go('/admin', 3000), await shot('admin-people'));
+if (want('agent-key')) {
+  await go(`${room}?view=channel:${g.id}`, 3000);
+  await click('AI agents');
+  await wait(800);
+  await js(`(() => { const i = [...document.querySelectorAll('.modal input[type=checkbox]')][1]; if (i && !i.checked) i.click(); })()`);
+  await click('Create key');
+  await wait(1000);
+  await shot('agent-key');
+}
+if (want('agent-consent')) {
+  const reg = await (await fetch(`${BASE}/oauth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ client_name: 'Claude', redirect_uris: ['http://localhost:33418/callback'], token_endpoint_auth_method: 'none' }) })).json();
+  const qs = new URLSearchParams({ response_type: 'code', client_id: reg.client_id, redirect_uri: 'http://localhost:33418/callback', code_challenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM', code_challenge_method: 'S256', scope: 'warroom:read warroom:write warroom:investigate' });
+  await go(`/oauth/authorize?${qs}`, 3000);
+  await shot('agent-consent');
+}
 await as(kate);
 if (want('guest')) (await go(`${room}?view=channel:${g.id}`, 3500), await shot('guest-view'));
 await as(null);

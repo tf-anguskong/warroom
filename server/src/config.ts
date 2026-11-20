@@ -104,6 +104,18 @@ export const config = {
   guestRequireEmail: bool(env.GUEST_REQUIRE_EMAIL, true),
   /** People without SSO sign in with a code emailed to them. On by default in quick mode. */
   emailLogin: bool(env.EMAIL_LOGIN, (env.WARROOM_MODE ?? '').toLowerCase() === 'now'),
+  /** AI agents over MCP (/mcp): OAuth sign-in for agents, and per-room agent keys. */
+  agents: {
+    enabled: bool(env.MCP_ENABLED, true),
+    /** The IC and room admins can issue a key for one war room (simplest for CLI agents). */
+    roomKeys: bool(env.MCP_ROOM_KEYS, true),
+    /** Who can create a room key for their own agent: 'controllers', 'responders', or 'everyone' (responders and allowed guests). */
+    selfKeys: (['controllers', 'responders', 'everyone'].includes(env.MCP_SELF_KEYS ?? '') ? env.MCP_SELF_KEYS : 'everyone') as 'controllers' | 'responders' | 'everyone',
+    /** How long an agent connected with OAuth keeps access before the person approves it again. */
+    grantDays: Number(env.MCP_GRANT_DAYS ?? 30),
+    /** Let MCP clients register themselves (OAuth dynamic client registration), as Claude does. */
+    dynamicClients: bool(env.MCP_DYNAMIC_CLIENTS, true),
+  },
   /** Uploaded files and screenshots (stored in DATA_DIR/files). */
   files: { maxMb: Number(env.MAX_UPLOAD_MB ?? 100) },
   livekit: {

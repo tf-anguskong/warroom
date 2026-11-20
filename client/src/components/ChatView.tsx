@@ -10,6 +10,7 @@ import { Attachments } from './Files';
 import { filesFrom } from '../lib/upload';
 import { AssignDialog } from './AssignDialog';
 import { GuestTag } from './Guests';
+import { AgentTag } from './Agents';
 
 const TIMELINE_TYPES = [
   { key: 'decision', label: 'Decision' },
@@ -215,7 +216,7 @@ export function ChatView({
           ) : (
             pins.map((m) => (
               <div key={m.id} className="pin">
-                <strong>{m.displayName}</strong> <span className="muted small mono">{utcTime(m.createdAt)}Z</span>
+                <strong>{m.displayName}</strong> {m.agent && <AgentTag name={m.agent} person={m.displayName} />} <span className="muted small mono">{utcTime(m.createdAt)}Z</span>
                 <div className="pin-body">{renderMessage(m.body, copy, mentionLookup)}</div>
               </div>
             ))
@@ -257,15 +258,16 @@ export function ChatView({
               }
               const prev = messages[i - 1];
               const grouped =
-                prev && prev.kind === 'msg' && prev.userId === m.userId && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000;
+                prev && prev.kind === 'msg' && prev.userId === m.userId && (prev.agent ?? null) === (m.agent ?? null) && new Date(m.createdAt).getTime() - new Date(prev.createdAt).getTime() < 5 * 60_000;
               return (
-                <div key={m.id} className={`msg ${grouped ? 'grouped' : ''} ${m.pinned ? 'pinned' : ''} ${m.userId === me.id ? 'mine' : ''} ${m.mentions.includes(me.id) ? 'mentioned' : ''}`}>
+                <div key={m.id} className={`msg ${grouped ? 'grouped' : ''} ${m.agent ? 'by-agent' : ''} ${m.pinned ? 'pinned' : ''} ${m.userId === me.id ? 'mine' : ''} ${m.mentions.includes(me.id) ? 'mentioned' : ''}`}>
                   {!grouped ? <Avatar id={m.userId ?? 'system'} name={m.displayName} size={compact ? 24 : 32} /> : <span className="msg-gutter" />}
                   <div className="msg-content">
                     {!grouped && (
                       <div className="msg-head">
                         <strong>{m.displayName}</strong>
                         <GuestTag user={userById(m.userId)} />
+                        {m.agent && <AgentTag name={m.agent} person={m.displayName} />}
                         <span className="mono muted small" title={`${localTime(m.createdAt)} local`}>
                           {utcTime(m.createdAt)}Z
                         </span>
