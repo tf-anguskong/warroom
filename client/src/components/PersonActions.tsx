@@ -4,7 +4,7 @@ import type { IncidentState } from '../types';
 import { useSignInCode } from './SignInCode';
 import { Icons } from './ui';
 
-type Person = { userId: string; displayName: string; voiceRoomId?: string | null; muted?: boolean };
+type Person = { userId: string; displayName: string; voiceRoomId?: string | null; muted?: boolean; camera?: boolean };
 
 /**
  * "⋯" menu on a person for the IC / room admins: move to a voice room, mute, remove from voice,
@@ -60,6 +60,11 @@ export function PersonActions({ state, person, online = true }: { state: Inciden
               <button role="menuitem" disabled={person.muted} onClick={() => run(() => mod.mute(person.userId))}>
                 {Icons.micOff} {person.muted ? 'Muted' : 'Mute microphone'}
               </button>
+              {person.camera && (
+                <button role="menuitem" onClick={() => run(() => mod.cameraOff(person.userId))}>
+                  {Icons.cameraOff} Turn off camera
+                </button>
+              )}
               <button role="menuitem" className="danger-text" onClick={() => run(() => mod.remove(person.userId))}>
                 {Icons.phoneOff} Remove from voice
               </button>

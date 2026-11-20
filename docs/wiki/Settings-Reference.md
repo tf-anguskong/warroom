@@ -20,6 +20,12 @@ All server configuration lives in **Admin → Settings**, stored in the database
 | Largest file upload (MB) | Size limit for screenshots, logs and evidence (1–4096). | 100 · `MAX_UPLOAD_MB` |
 | Development sign-in | Name and email, no password. Never available in production. | on outside production · `DEV_AUTH` |
 
+## Incidents
+
+| Setting | What it does | Default / env |
+|---|---|---|
+| SEV1–SEV4: status update every (minutes) | How often the dashboard expects a status update at each severity, measured from the last update to executives in the Comms Log (or any update if there's no executive audience). Overdue updates are flagged in red. 0 = no expectation. | 30, 60, 240, 0 · `COMMS_SEV1_MINUTES` … `COMMS_SEV4_MINUTES` |
+
 ## Okta
 
 | Setting | What it does | Env |

@@ -94,6 +94,33 @@ For incidents that run for days.
 - Overlapping shifts for one person and shifts over 24 hours are refused. Guests don't see the schedule.
 - *Who's doing what* shows each person's shift, and the postmortem includes the schedule.
 
+## Dashboard
+
+**Dashboard** (left sidebar) is one page that answers "where are we?" without reading the chat. It updates on its own as the room changes.
+
+![War room dashboard](../images/dashboard-board.png)
+
+| Panel | What it shows | Where it comes from |
+|---|---|---|
+| Header | Severity, status, how long the incident has been open, the IC | The incident |
+| Phases | Time spent in each status (Investigating, Identified, Mitigating, Monitoring), with the current one striped | Status changes on the timeline |
+| Status updates | Time since the last update to executives, when the next is due and whether it's overdue, the last summary, and the last update to each audience | The **Comms Log** sheet, and the cadence for this severity in **Settings → Incidents** |
+| Actions | Open, overdue, blocked and done, open by priority, and the most urgent open actions with owner and due time | The **Action Items** sheet |
+| Containment | Affected assets by containment state and by impact | The **Affected Assets** sheet |
+| Indicators | Indicators by status (new, investigating, blocked, false positive) | The **IOC Tracker** sheet |
+| Latest decisions and findings | The six most recent | The timeline |
+| People and coverage | Who's in the room, in voice (and with camera), on shift, away; shift coverage hour by hour for the next 24 hours with gaps in red; each person's task and workload (open actions, live indicators and uncontained assets they own) | Presence, the schedule, the sheets |
+
+Sheets are found by their column names (for example *Action* and *Status*), so it works with the templates and with your own sheets that use the same names, and counts across several. A panel without a matching sheet says "not tracked here".
+
+Guests see the panels built from what they were given, without people and coverage. AI agents can read the same numbers (`get_dashboard`).
+
+### Wall mode
+
+**Wall mode** (top right of the dashboard) opens the dashboard on its own page with large type and a clock, for a TV in the room or a second monitor. Press **Full screen**. It refreshes by itself and doesn't count as someone in the room. The link works for anyone signed in who can open the incident, so it's also a good link to send executives.
+
+![Wall mode](../images/dashboard-wall.png)
+
 ## Postmortem export
 
 **Postmortem** (top bar) downloads a Markdown document with the summary, roles, "Who did what", the full timeline, notes, the shift schedule, the file list with hashes, and pinned messages. Sheets aren't included; export each one as CSV from its header. Use it as the start of your post-incident review.

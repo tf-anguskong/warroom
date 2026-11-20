@@ -199,6 +199,7 @@ export interface Presence {
   voiceRoomId: string | null;
   muted: boolean;
   sharing: boolean;
+  camera?: boolean;
   view: string | null;
   away?: Away | null;
 }
@@ -243,7 +244,8 @@ export type View =
   | { kind: 'schedule' }
   | { kind: 'timeline' }
   | { kind: 'investigate' }
-  | { kind: 'roster' };
+  | { kind: 'roster' }
+  | { kind: 'dashboard' };
 
 export interface MentionEvent {
   messageId: string;

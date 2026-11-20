@@ -11,6 +11,7 @@ import { IncidentRoom } from './pages/IncidentRoom';
 import { Admin } from './pages/Admin';
 import { Start } from './pages/Start';
 import { Connect } from './pages/Connect';
+import { Wall } from './pages/Wall';
 import './styles.css';
 
 createRoot(document.getElementById('root')!).render(
@@ -29,6 +30,7 @@ createRoot(document.getElementById('root')!).render(
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/incidents/:id" element={<IncidentRoom />} />
+                <Route path="/incidents/:id/wall" element={<Wall />} />
                 <Route path="/admin" element={<Admin />} />
                 <Route path="/start" element={<Start />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

@@ -365,6 +365,8 @@ await as(jordan);
 if (want('dashboard')) (await go('/'), await shot('dashboard'));
 if (want('room')) (await go(`${room}?view=channel:${g.id}`, 3500), await shot('room'));
 if (want('ioc')) (await go(`${room}?view=sheet:${sheetId('IOC Tracker')}`, 3000), await shot('sheet-ioc'));
+if (want('dashboard-board')) (await go(`${room}?view=dashboard`, 3500), await shot('dashboard-board'));
+if (want('dashboard-wall')) (await go(`${room}/wall`, 3500), await shot('dashboard-wall'));
 if (want('timeline')) (await go(`${room}?view=timeline`, 3000), await shot('timeline'));
 if (want('note')) (await go(`${room}?view=note:${noteId}`, 3000), await shot('note'));
 if (want('roster')) (await go(`${room}?view=roster`, 3000), await shot('roster'));

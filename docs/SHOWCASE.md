@@ -35,7 +35,7 @@ Severity, status, who's in command, how long it's been running, and how many peo
 
 ### Talk, coordinate and share screens
 
-Each incident gets a **Main Bridge** plus breakout voice rooms (here: *Containment* and *Exec briefing*), with screen sharing. Chat channels sit alongside, @mentions reach people or whole roles, and the Incident Commander can move people between rooms, mute, or call everyone back.
+Each incident gets a **Main Bridge** plus breakout voice rooms (here: *Containment* and *Exec briefing*), with cameras and screen sharing. Chat channels sit alongside, @mentions reach people or whole roles, and the Incident Commander can move people between rooms, mute, or call everyone back.
 
 ### Clear command and accountability
 
@@ -54,6 +54,12 @@ A real spreadsheet inside the room: typed columns, formulas, live cursors, paste
 Markdown notes that save automatically and update live for everyone, with templates for working notes, call notes and shift handoffs.
 
 ![A shift handoff note, editor and preview side by side](images/note.png)
+
+### Know where you stand at a glance
+
+Every war room has a **dashboard**: how long the incident has spent in each phase, containment progress, open and overdue actions, whether the next executive update is overdue, the latest decisions, and who's on, in voice, on shift or away. **Wall mode** puts it on the TV in the room. It's built from what the team already records, so there's nothing extra to keep up to date.
+
+![War room dashboard](images/dashboard-board.png)
 
 ### A timeline that writes itself
 

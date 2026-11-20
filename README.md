@@ -21,7 +21,7 @@ Free for individuals, non-profits and small companies; larger companies need a c
 
 ## What's in a war room
 
-- **Voice**: a Main Bridge plus any number of **breakout rooms**, with speaking indicators, mute/deafen, and **screen sharing**. Runs on a self-hosted [LiveKit](https://livekit.io) SFU, so 50+ people per room is fine.
+- **Voice**: a Main Bridge plus any number of **breakout rooms**, with speaking indicators, mute/deafen, **cameras** and **screen sharing**. Runs on a self-hosted [LiveKit](https://livekit.io) SFU, so 50+ people per room is fine.
 - **Text channels** that can be **attached to several voice rooms** and **shared across incidents** (both war rooms see and post to the same channel).
 - A **native spreadsheet** per incident: typed columns (text, number, select, date, person, checkbox), formulas (`=SUM`, `=COUNTIF`, `=IF`, …), live cursors of other editors, paste from Excel or SIEM exports, and CSV export. Templates: IOC Tracker, Affected Assets, Action Items, Comms Log.
 - **Shift schedule** for long-running war rooms: the **Schedule** view shows who is on now (flagging anyone on shift who isn't in the room), the next handoff, and a UTC timeline (24 hours, 3 days or 7 days) with everyone's shifts and a "now" line. Anyone can add their own shifts; the Incident Commander and room admins can schedule anyone, with "repeat daily" for 8- or 12-hour rotations. People get a reminder 15 minutes before their shift, and the room gets a notice when a shift starts and when it ends (naming who is on now, so handoffs aren't missed). Scheduling changes go on the timeline, *Who's doing what* shows each person's shift, and the postmortem export includes the schedule. Overlapping shifts for one person and shifts over 24 hours are refused. Guests don't see the schedule.
@@ -42,6 +42,7 @@ Free for individuals, non-profits and small companies; larger companies need a c
 - **@mentions**: `@name`, `@Incident Commander` (or any role, reaching whoever holds it), and `@here` (everyone in the war room now), with autocomplete. Mentions are highlighted, show an @ badge on the channel and the dashboard card, stay unread until you open the channel, and pop up a toast wherever you are in the app.
 - **Investigate** with integrations: look up a person in **Okta**, search the Okta System Log, and **live-watch** someone's Okta activity (streams into `#okta-watch`); run **Sumo Logic** searches from editable starter queries whose `{{ip}}`/`{{user}}`/`{{hash}}`/`{{host}}`/`{{domain}}` placeholders are suggested from the incident's sheets. Results are shared with the room, can be copied into a sheet or posted to a channel, and every search is logged on the timeline. Queries marked auto-run start when an incident is declared.
 - **AI agents (MCP)**: a built-in [Model Context Protocol](https://modelcontextprotocol.io) server at `/mcp` lets agents such as Claude read a war room (incidents, chat, timeline, sheets, notes, text files and images, the full incident report) and, if allowed, post messages, add timeline entries and fill in sheets and notes, or run integration searches. An agent always acts for one person, never with more access than they have, and never with room control (no roles, invites, moderation or settings). Everything it does is marked *via Claude* in chat, on the timeline and in the export. Connect with **OAuth sign-in** (Claude → *Add custom connector*, or `claude mcp add --transport http warroom https://…/mcp`): the person signs in the usual way and chooses read or write, and one war room or all. Everyone in a room can also create a **personal room key** for their own agent (one war room, a few hours, acting as them); guests can too when the IC or a room admin allows it, and their agent stays within the guest's access. The IC and room admins see and can disconnect every agent in the room. Agent messages show the person's name with an **AI agent** tag. See the [AI agents wiki page](docs/wiki/AI-Agents.md).
+- **Dashboard** for every war room: time in each status, containment and indicators, open and overdue actions, whether a status update to executives is overdue (cadence per severity in Settings), the latest decisions, and people and coverage (who's here, in voice, on shift, away, shift gaps in the next 24 hours, workload). **Wall mode** shows it full screen with large type for a TV or second monitor. Built from the timeline and the template sheets, so there's nothing extra to fill in.
 - **Admin panel**: grant/remove admin, deactivate local accounts, connect and test integrations, and an admin activity log.
 - **Temporary War Rooms** (`WARROOM_MODE=now`): no identity provider needed. Invite **responders** (full team accounts) or **guests** with a single-use link plus a 6-digit code, emailed by War Room or, without email, handed to the inviter to pass on. People sign back in with emailed codes, or with a code (and for guests a fresh link) that the IC or a room admin makes from the room's People list when someone drops off. **Export** any room to an encrypted `.warroom` file and **restore** it on any War Room.
 - **Single sign-on** with **Okta (OIDC)** and **Microsoft Entra ID (OIDC or SAML 2.0)**, together or on their own, plus **SCIM 2.0 provisioning** from either (users and groups). Deactivating someone in the identity provider disconnects their live session immediately.
@@ -52,7 +53,7 @@ Free for individuals, non-profits and small companies; larger companies need a c
 |---|---|
 | Client | React 18 + TypeScript + Vite, plain CSS (tokens in `client/src/styles.css`) |
 | Server | Node 24, Express, Socket.IO, built-in `node:sqlite` |
-| Voice/screen share | LiveKit server + `livekit-client`; `livekit-server-sdk` for tokens and moderator mute/remove |
+| Voice, video, screen share | LiveKit server + `livekit-client` (simulcast, adaptive stream); `livekit-server-sdk` for tokens and moderator mute / camera off / remove |
 | Auth | `openid-client` (OIDC + PKCE), `@node-saml/node-saml` (SAML), signed session cookie, SCIM bearer token |
 
 ```
@@ -130,6 +131,7 @@ There is no `.env` file. Everything else is configured in **Admin → Settings**
 | Section | What's there |
 |---|---|
 | General | Public address, how long a sign-in lasts, people to make admin on their next sign-in, development sign-in (never in production) |
+| Incidents | How often a status update is expected at each severity (for the dashboard) |
 | Okta | Issuer, client ID and secret, scopes, admin group, create accounts on first sign-in |
 | Microsoft Entra ID | Tenant, OIDC or SAML, client ID and secret or signing certificate, admin group or app role |
 | Provisioning (SCIM) | Generate the bearer token (shown once); base URL to copy |

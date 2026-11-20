@@ -95,6 +95,7 @@ Tools appear according to what was approved: an agent approved to read only does
 | `read_note` | read | A note's Markdown and version |
 | `list_files` / `read_file` | read | Files and evidence; the text of text files (first 200 KB) and images. PDF, Word and other files only return their details |
 | `incident_report` | read | The full written record (the postmortem export) as Markdown |
+| `get_dashboard` | read | The dashboard's numbers: time per status, containment, indicators, actions, update cadence, latest decisions, people and coverage |
 | `post_message` | write | Post in a channel |
 | `add_timeline_entry` | write | Add a finding, decision, action or note, optionally backdated |
 | `add_sheet_rows` / `update_sheet_cells` | write | Append rows by column name, or change cells |

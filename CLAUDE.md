@@ -35,6 +35,8 @@ server/src/
   files.ts        uploads to DATA_DIR/files with SHA-256; downloads; Files view API
   archive.ts      room export/import (.warroom: tar.gz + manifest, optional AES-256-GCM); archive-routes.ts, room-cli.ts
   email-login.ts  sign-in with emailed or admin-issued codes for accounts without SSO
+  dashboard.ts    war room dashboard (status board + people and coverage), computed from the timeline, template
+                  sheets (found by column name), presence and shifts; comms cadence per severity is config.comms
   shifts.ts       shift schedule; a 30 s ticker sends reminders and start/end notices (flags on each row so each fires once)
   guests.ts       guest invites, scopes, deny-by-default route allowlist, email codes, sweeper
   join-requests.ts  "Ask to join" from the room link (public /auth/rooms routes); admitting makes a normal invite.

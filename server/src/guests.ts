@@ -119,6 +119,8 @@ const RULES: Rule[] = [
   ['PUT', new RegExp(`^/api/sheets/${ID}/cells$`), (u, inc, m) => lookup.sheetIncident(m[1]) === inc && canSee(u, inc, 'sheet', m[1])],
   ['POST', new RegExp(`^/api/sheets/${ID}/rows$`), (u, inc, m) => lookup.sheetIncident(m[1]) === inc && canSee(u, inc, 'sheet', m[1])],
   ['DELETE', new RegExp(`^/api/sheets/${ID}/rows/[^/]+$`), (u, inc, m) => lookup.sheetIncident(m[1]) === inc && canSee(u, inc, 'sheet', m[1])],
+  // The dashboard only shows guests what they were given (dashboard.ts filters it).
+  ['GET', new RegExp(`^/api/incidents/${ID}/dashboard$`), (_u, inc, m) => m[1] === inc],
   // Their own AI agent, if the room allowed it (agents.ts checks the rest; a guest only sees and ends their own keys).
   ['GET', new RegExp(`^/api/incidents/${ID}/agents$`), (_u, inc, m) => m[1] === inc],
   ['POST', new RegExp(`^/api/incidents/${ID}/agent-keys$`), (u, inc, m) => m[1] === inc && parseScope(u.guest_scope).agents],

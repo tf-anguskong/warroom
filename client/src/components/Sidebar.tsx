@@ -185,6 +185,7 @@ export function Sidebar({ state, presence, view, unread, mentions, onView, onJoi
                         {p.away && <span className="away-tag" title={awayText(p.away)}>away</span>}
                         <GuestTag user={userById(p.userId)} />
                         {p.userId === leadId && <span className="lead-tag">lead</span>}
+                        {p.camera && <span className="sharing-tag" title="Camera on">{Icons.camera}</span>}
                         {p.sharing && <span className="sharing-tag" title="Sharing screen">{Icons.screen}</span>}
                         {p.userId !== me.id && <PersonActions state={state} person={p} />}
                       </li>
@@ -260,6 +261,12 @@ export function Sidebar({ state, presence, view, unread, mentions, onView, onJoi
         </section>
 
         <section className="nav-section">
+          <div className={`nav-item ${view.kind === 'dashboard' ? 'active' : ''}`}>
+            <button className="nav-main" onClick={() => onView({ kind: 'dashboard' })}>
+              <span className="nav-icon">{Icons.grid}</span>
+              <span className="nav-label">Dashboard</span>
+            </button>
+          </div>
           {state.canSeeTimeline && <div className={`nav-item ${view.kind === 'timeline' ? 'active' : ''}`}>
             <button className="nav-main" onClick={() => onView({ kind: 'timeline' })}>
               <span className="nav-icon">{Icons.clock}</span>

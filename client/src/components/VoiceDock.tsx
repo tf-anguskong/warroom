@@ -1,5 +1,6 @@
 import { ConnectionQuality } from 'livekit-client';
 import { useVoice } from '../lib/voice';
+import { useApp } from '../lib/app';
 import type { IncidentState } from '../types';
 import { Icons } from './ui';
 
@@ -13,6 +14,11 @@ const QUALITY: Record<string, { label: string; bars: number }> = {
 
 export function VoiceDock({ state, onJoin }: { state: IncidentState; onJoin: (voiceRoomId: string) => void }) {
   const v = useVoice();
+  const { toast } = useApp();
+  const camera = async () => {
+    const err = await v.toggleCamera();
+    if (err) toast({ text: err, tone: 'error' }, 6000);
+  };
   const joinMain = () => state.voiceRooms[0] && onJoin(state.voiceRooms[0].id);
   const room = state.voiceRooms.find((r) => r.id === v.roomId);
 
@@ -75,6 +81,10 @@ export function VoiceDock({ state, onJoin }: { state: IncidentState; onJoin: (vo
         <button className={`vd-btn ${v.deafened ? 'off' : ''}`} onClick={v.toggleDeafen} aria-pressed={v.deafened} title={v.deafened ? 'Undeafen' : 'Deafen'}>
           {v.deafened ? Icons.headphonesOff : Icons.headphones}
           <span>{v.deafened ? 'Deaf' : 'Audio'}</span>
+        </button>
+        <button className={`vd-btn ${v.cameraOn ? 'on' : ''}`} onClick={camera} aria-pressed={v.cameraOn} title={v.cameraOn ? 'Turn camera off' : 'Turn camera on'}>
+          {v.cameraOn ? Icons.camera : Icons.cameraOff}
+          <span>{v.cameraOn ? 'Camera' : 'Cam off'}</span>
         </button>
         <button className={`vd-btn ${v.sharing ? 'on' : ''}`} onClick={v.toggleShare} aria-pressed={v.sharing} title={v.sharing ? 'Stop sharing' : 'Share screen'}>
           {Icons.screen}

@@ -677,7 +677,7 @@ api.patch(
     }
     if (STATUSES.includes(b.status) && b.status !== inc.status) {
       q.run('UPDATE incidents SET status = ?, resolved_at = ? WHERE id = ?', b.status, b.status === 'resolved' ? now() : null, inc.id);
-      addTimeline(inc.id, user.id, 'status', `Status: ${STATUS_LABEL[inc.status]} → ${STATUS_LABEL[b.status]}`);
+      addTimeline(inc.id, user.id, 'status', `Status: ${STATUS_LABEL[inc.status]} → ${STATUS_LABEL[b.status]}`, { from: inc.status, to: b.status });
       systemNotice(inc.id, `${user.display_name} set status to **${STATUS_LABEL[b.status]}**`);
       changes.push('status');
     }
@@ -964,13 +964,13 @@ api.post(
   }),
 );
 
-/** Mute someone's microphone (they can unmute themselves) or remove them from voice. */
+/** Mute someone's microphone, turn off their camera (they can turn either back on) or remove them from voice. */
 api.post(
-  '/incidents/:id/voice/:action(mute|remove)',
+  '/incidents/:id/voice/:action(mute|camera|remove)',
   h(async (req) => {
     const inc = mustIncident(req.params.id);
-    const action = req.params.action as 'mute' | 'remove';
-    requireControl(req, inc.id, action === 'mute' ? 'mute people' : 'remove people from voice');
+    const action = req.params.action as 'mute' | 'camera' | 'remove';
+    requireControl(req, inc.id, action === 'mute' ? 'mute people' : action === 'camera' ? 'turn off people’s cameras' : 'remove people from voice');
     const userId = str(req.body?.userId);
     const target = getUser(userId);
     if (!target) throw new HttpError(404, 'user not found');
@@ -982,15 +982,16 @@ api.post(
         await livekit().removeParticipant(lkRoom, userId);
       } else {
         const info = await livekit().getParticipant(lkRoom, userId);
-        const mic = info.tracks.find((t) => t.source === TrackSource.MICROPHONE && !t.muted);
-        if (!mic) return { ok: true, alreadyMuted: true };
-        await livekit().mutePublishedTrack(lkRoom, userId, mic.sid, true);
+        const source = action === 'camera' ? TrackSource.CAMERA : TrackSource.MICROPHONE;
+        const track = info.tracks.find((t) => t.source === source && !t.muted);
+        if (!track) return { ok: true, alreadyMuted: true };
+        await livekit().mutePublishedTrack(lkRoom, userId, track.sid, true);
       }
     } catch (err) {
       console.error(`[voice] ${action} failed`, err);
       throw new HttpError(502, `Couldn't reach the voice server to ${action} ${target.display_name}`);
     }
-    emitToUser(userId, action === 'mute' ? 'voice:muted' : 'voice:removed', {
+    emitToUser(userId, action === 'mute' ? 'voice:muted' : action === 'camera' ? 'voice:camera-off' : 'voice:removed', {
       incidentId: inc.id,
       name: room.name,
       by: req.user!.display_name,

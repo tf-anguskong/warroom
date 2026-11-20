@@ -17,6 +17,8 @@ export interface PresenceEntry {
   voiceRoomId: string | null;
   muted: boolean;
   sharing: boolean;
+  /** Camera on in their voice room. */
+  camera?: boolean;
   view: string | null;
   away?: Away | null;
 }
@@ -188,6 +190,7 @@ export function initRealtime(server: HttpServer) {
         voiceRoomId: null,
         muted: false,
         sharing: false,
+        camera: false,
         view: null,
       };
       socket.join(`incident:${incidentId}`);
@@ -200,12 +203,13 @@ export function initRealtime(server: HttpServer) {
 
     socket.on(
       'presence:update',
-      (patch: Partial<Pick<PresenceEntry, 'voiceRoomId' | 'muted' | 'sharing' | 'view'>>) => {
+      (patch: Partial<Pick<PresenceEntry, 'voiceRoomId' | 'muted' | 'sharing' | 'camera' | 'view'>>) => {
         const p = socket.data.presence;
         if (!p || !socket.data.incidentId) return;
         if (patch.voiceRoomId !== undefined) p.voiceRoomId = patch.voiceRoomId;
         if (patch.muted !== undefined) p.muted = Boolean(patch.muted);
         if (patch.sharing !== undefined) p.sharing = Boolean(patch.sharing);
+        if (patch.camera !== undefined) p.camera = Boolean(patch.camera);
         if (patch.view !== undefined) p.view = patch.view;
         broadcastPresence(socket.data.incidentId);
       },

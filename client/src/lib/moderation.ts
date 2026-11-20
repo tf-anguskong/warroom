@@ -33,6 +33,14 @@ export function useModeration(state: IncidentState) {
           fail(e);
         }
       },
+      cameraOff: async (userId: string) => {
+        try {
+          const r = await api.post<{ alreadyMuted?: boolean }>(`/api/incidents/${inc}/voice/camera`, { userId });
+          toast({ text: r.alreadyMuted ? `${name(userId)}’s camera is already off` : `Turned off ${name(userId)}’s camera` }, 3000);
+        } catch (e) {
+          fail(e);
+        }
+      },
       remove: async (userId: string) => {
         try {
           await api.post(`/api/incidents/${inc}/voice/remove`, { userId });

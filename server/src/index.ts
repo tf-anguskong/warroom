@@ -24,6 +24,7 @@ import { emailLoginRouter, loginCodeRouter } from './email-login.js';
 import { announceSetupIfNeeded, setupRouter } from './setup.js';
 import { agentsRouter, oauthRouter, startAgentSweeper } from './agents.js';
 import { mcpRouter, setInternalPort } from './mcp.js';
+import { dashboardRouter } from './dashboard.js';
 
 // Saved settings (Admin → Settings) go on top of the environment and defaults before anything runs.
 applySettings();
@@ -66,6 +67,7 @@ app.use('/api', requireAuth, shiftsRouter);
 app.use('/api', requireAuth, archiveRouter);
 app.use('/api', requireAuth, loginCodeRouter);
 app.use('/api', requireAuth, agentsRouter);
+app.use('/api', requireAuth, dashboardRouter);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const clientDist = resolve(process.env.CLIENT_DIST ?? join(here, '../../client/dist'));

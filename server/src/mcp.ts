@@ -408,6 +408,18 @@ function buildServer(c: Ctx) {
     safe(async (a: { incident?: string }) => text(await call<string>(c, 'GET', `/api/incidents/${await incidentId(c, a.incident)}/export.md`))),
   );
 
+  server.registerTool(
+    'get_dashboard',
+    {
+      title: 'Get dashboard',
+      description:
+        'The war room status board as numbers: time in each status, indicators by status, affected assets by containment, open/overdue/blocked actions, status update cadence (overdue or not), latest decisions and findings, and who is here, on shift, in voice or away, with workload. Use it for sitreps.',
+      inputSchema: { incident: incidentArg },
+      annotations: read,
+    },
+    safe(async (a: { incident?: string }) => json(await call(c, 'GET', `/api/incidents/${await incidentId(c, a.incident)}/dashboard`))),
+  );
+
   server.registerPrompt(
     'sitrep',
     {
@@ -421,7 +433,7 @@ function buildServer(c: Ctx) {
           role: 'user',
           content: {
             type: 'text',
-            text: `Write a situation report for ${incident ?? 'the active incident'} in War Room. Use get_incident, get_timeline and read_channel (and read_note or read_sheet where useful). Cover: current status and severity, what happened so far, key findings and decisions, who is working on what, open questions and next steps. Keep it under 300 words, plain and specific. Don't post it anywhere unless I ask.`,
+            text: `Write a situation report for ${incident ?? 'the active incident'} in War Room. Use get_dashboard, get_incident, get_timeline and read_channel (and read_note or read_sheet where useful). Cover: current status and severity, what happened so far, key findings and decisions, who is working on what, open questions and next steps. Keep it under 300 words, plain and specific. Don't post it anywhere unless I ask.`,
           },
         },
       ],

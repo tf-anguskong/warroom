@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
-export type SectionId = 'general' | 'okta' | 'entra' | 'scim' | 'email' | 'voice' | 'agents';
+export type SectionId = 'general' | 'incidents' | 'okta' | 'entra' | 'scim' | 'email' | 'voice' | 'agents';
 type Kind = 'string' | 'url' | 'number' | 'bool' | 'enum' | 'list' | 'text' | 'secret';
 
 interface Field {
@@ -96,6 +96,14 @@ export const FIELDS: Field[] = [
     base: () => envDefaults.devAuth, apply: (v) => (config.devAuth = Boolean(v) && !config.production),
     readOnly: () => (config.production ? 'Always off in production.' : null),
   },
+
+  // ---- Incidents: status update cadence for the dashboard
+  ...(['SEV1', 'SEV2', 'SEV3', 'SEV4'] as const).map((sev): Field => ({
+    key: `comms.${sev}`, section: 'incidents', kind: 'number', min: 0, max: 1440, env: [`COMMS_${sev}_MINUTES`],
+    label: `${sev}: status update every (minutes)`,
+    help: sev === 'SEV1' ? 'Measured from the last update to executives in the Comms Log (or any update if there is no executive audience). 0 = no expectation.' : undefined,
+    base: () => envDefaults.comms[sev], apply: (v) => (config.comms[sev] = v),
+  })),
 
   // ---- Okta
   {
@@ -257,6 +265,7 @@ const byKey = new Map(FIELDS.map((f) => [f.key, f]));
 
 export const SECTIONS: { id: SectionId; label: string; description: string }[] = [
   { id: 'general', label: 'General', description: 'Address, sign-in length and admins.' },
+  { id: 'incidents', label: 'Incidents', description: 'How often status updates are expected, by severity. The war room dashboard flags an update as overdue.' },
   { id: 'okta', label: 'Okta', description: 'Sign in with Okta over OpenID Connect.' },
   { id: 'entra', label: 'Microsoft Entra ID', description: 'Sign in with Microsoft over OpenID Connect or SAML.' },
   { id: 'scim', label: 'Provisioning (SCIM)', description: 'Let Okta or Entra create, update and deactivate accounts.' },

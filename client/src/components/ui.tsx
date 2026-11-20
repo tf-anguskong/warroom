@@ -86,6 +86,8 @@ const svg = (d: ReactNode) => (
 
 /** Inline line icons (Lucide-style) so the app has no icon dependency. */
 export const Icons = {
+  camera: svg(<><path d="M15 10l5-3v10l-5-3" /><rect x="3" y="6" width="12" height="12" rx="2" /></>),
+  cameraOff: svg(<><path d="m2 2 20 20M15 10l5-3v10l-2.5-1.5M10 6h3a2 2 0 0 1 2 2v3M15 15.5V16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h1" /></>),
   bot: svg(<><rect x="4" y="8" width="16" height="12" rx="3" /><path d="M12 8V4M9 13v1M15 13v1M9 17h6" /><circle cx="12" cy="3" r="1" /></>),
   mic: svg(<><rect x="9" y="2" width="6" height="12" rx="3" /><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 18v4" /></>),
   micOff: svg(<><path d="m2 2 20 20M9 9v2a3 3 0 0 0 5.1 2.1M15 9.3V5a3 3 0 0 0-5.9-.7M19 10v1a7 7 0 0 1-1.1 3.8M5 10v1a7 7 0 0 0 11.5 5.4M12 18v4" /></>),

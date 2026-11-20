@@ -49,12 +49,14 @@ Everyone else can still chat, edit sheets and notes, add timeline entries, open 
 
 The IC, room admins and app admins **Hand off** or **Reassign** command from the Incident Command card, with an optional handoff note. Anyone else can **Take command** only when nobody holds it; otherwise they **Request command** (with a note). The IC and room admins hear a sound, see the request in the panel, and choose **Hand over** or **Decline**. Handoffs, requests and declines are announced in chat and recorded on the timeline.
 
-## Voice and screen sharing
+## Voice, video and screen sharing
 
 Every incident has a **Main Bridge**. Anyone can open **breakout rooms** for parallel workstreams (for example *Containment* or *Exec briefing*); each gets its own channel.
 
 - Join with **Join Main Bridge** (or click a room). Speaking indicators show who's talking.
 - Mute and deafen yourself from the voice dock; share your screen, and others watch it in the room.
+- **Camera**: turn your camera on from the voice dock. Cameras show as tiles above the chat (a gallery, or a strip under a screen share), with a green outline on whoever is talking; your own view is mirrored. Up to 12 tiles show at once (you and the people talking first); the rest are listed. Each tile can go full screen. Video adapts to the tile size and the connection, so a big room doesn't need much bandwidth.
+- People with their camera on have a camera icon next to their name. The IC and room admins can **Turn off camera** for someone from the person's ⋯ menu, as with mute; that person can turn it back on.
 - Rooms of 50+ people are fine: voice runs on a self-hosted [LiveKit](https://livekit.io) server. Nothing is recorded.
 - People in the room but not in voice are listed separately; members who aren't connected appear faded under *Not in the room*.
 

@@ -285,6 +285,7 @@ const AGENT_RULES: AgentRule[] = [
   ['GET', new RegExp(`^/api/incidents/${ID}/export\\.md$`), 'read', (a, m) => within(a, m[1])],
   ['GET', new RegExp(`^/api/incidents/${ID}/files$`), 'read', (a, m) => within(a, m[1])],
   ['GET', new RegExp(`^/api/incidents/${ID}/shifts$`), 'read', (a, m) => within(a, m[1])],
+  ['GET', new RegExp(`^/api/incidents/${ID}/dashboard$`), 'read', (a, m) => within(a, m[1])],
   ['GET', new RegExp(`^/api/channels/${ID}/(messages|pins)$`), 'read', (a, m) => channelOk(a, m[1])],
   ['GET', new RegExp(`^/api/notes/${ID}$`), 'read', (a, m) => within(a, incidentOf.note(m[1]))],
   ['GET', new RegExp(`^/api/sheets/${ID}$`), 'read', (a, m) => within(a, incidentOf.sheet(m[1]))],

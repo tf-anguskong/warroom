@@ -116,6 +116,13 @@ export const config = {
     /** Let MCP clients register themselves (OAuth dynamic client registration), as Claude does. */
     dynamicClients: bool(env.MCP_DYNAMIC_CLIENTS, true),
   },
+  /** Expected minutes between status updates (Comms Log) per severity, for the dashboard. 0 = no expectation. */
+  comms: {
+    SEV1: Number(env.COMMS_SEV1_MINUTES ?? 30),
+    SEV2: Number(env.COMMS_SEV2_MINUTES ?? 60),
+    SEV3: Number(env.COMMS_SEV3_MINUTES ?? 240),
+    SEV4: Number(env.COMMS_SEV4_MINUTES ?? 0),
+  },
   /** Uploaded files and screenshots (stored in DATA_DIR/files). */
   files: { maxMb: Number(env.MAX_UPLOAD_MB ?? 100) },
   livekit: {

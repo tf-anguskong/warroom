@@ -13,6 +13,7 @@ import {
   Room,
   RoomEvent,
   Track,
+  VideoPresets,
   type Participant,
   type RemoteTrack,
 } from 'livekit-client';
@@ -25,6 +26,7 @@ export interface VoiceParticipant {
   speaking: boolean;
   micOn: boolean;
   sharing: boolean;
+  camera: boolean;
   isLocal: boolean;
   quality: ConnectionQuality;
 }
@@ -36,6 +38,15 @@ export interface ScreenShare {
   isLocal: boolean;
 }
 
+export interface CameraFeed {
+  identity: string;
+  name: string;
+  track: Track;
+  isLocal: boolean;
+  speaking: boolean;
+  micOn: boolean;
+}
+
 type Status = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 
 interface VoiceContextValue {
@@ -44,6 +55,8 @@ interface VoiceContextValue {
   error: string | null;
   participants: VoiceParticipant[];
   screenShares: ScreenShare[];
+  cameras: CameraFeed[];
+  cameraOn: boolean;
   muted: boolean;
   deafened: boolean;
   sharing: boolean;
@@ -54,6 +67,8 @@ interface VoiceContextValue {
   toggleMute: () => Promise<void>;
   toggleDeafen: () => Promise<void>;
   toggleShare: () => Promise<void>;
+  /** Resolves to an error message when the camera couldn't start. */
+  toggleCamera: () => Promise<string | null>;
 }
 
 const VoiceContext = createContext<VoiceContextValue | null>(null);
@@ -70,6 +85,7 @@ const toParticipant = (p: Participant, isLocal: boolean): VoiceParticipant => ({
   speaking: p.isSpeaking,
   micOn: p.isMicrophoneEnabled,
   sharing: p.isScreenShareEnabled,
+  camera: p.isCameraEnabled,
   isLocal,
   quality: p.connectionQuality,
 });
@@ -93,6 +109,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       voiceRoomId: room ? roomIdRef.current : null,
       muted: lp ? !lp.isMicrophoneEnabled || deafRef.current : false,
       sharing: lp ? lp.isScreenShareEnabled : false,
+      camera: lp ? lp.isCameraEnabled : false,
     });
   }, []);
   const roomIdRef = useRef<string | null>(null);
@@ -122,6 +139,9 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
           adaptiveStream: true,
           dynacast: true,
           audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          // Cameras: 540p captured, sent in layers so small tiles only receive a small stream.
+          videoCaptureDefaults: { resolution: VideoPresets.h540.resolution },
+          publishDefaults: { simulcast: true, videoSimulcastLayers: [VideoPresets.h180, VideoPresets.h360] },
         });
         room
           .on(RoomEvent.TrackSubscribed, (track: RemoteTrack) => {
@@ -254,6 +274,26 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     bump();
   }, [bump, reportPresence]);
 
+  const toggleCamera = useCallback(async (): Promise<string | null> => {
+    const lp = roomRef.current?.localParticipant;
+    if (!lp) return 'Join a voice room first';
+    try {
+      await lp.setCameraEnabled(!lp.isCameraEnabled);
+      return null;
+    } catch (err) {
+      console.warn('[voice] camera failed', err);
+      const name = err instanceof Error ? err.name : '';
+      return name === 'NotAllowedError'
+        ? 'The browser blocked the camera. Allow it in the address bar and try again.'
+        : name === 'NotFoundError'
+          ? 'No camera found on this device.'
+          : 'Couldn’t start the camera. Another app may be using it.';
+    } finally {
+      reportPresence();
+      bump();
+    }
+  }, [bump, reportPresence]);
+
   // Ctrl/Cmd+Shift+M toggles mute.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -272,6 +312,7 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
     const room = roomRef.current;
     const participants: VoiceParticipant[] = [];
     const screenShares: ScreenShare[] = [];
+    const cameras: CameraFeed[] = [];
     if (room) {
       const all: [Participant, boolean][] = [
         [room.localParticipant, true],
@@ -283,6 +324,10 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
         if (pub?.track && !pub.isMuted) {
           screenShares.push({ identity: p.identity, name: p.name || p.identity, track: pub.track, isLocal });
         }
+        const cam = p.getTrackPublication(Track.Source.Camera);
+        if (cam?.track && !cam.isMuted) {
+          cameras.push({ identity: p.identity, name: p.name || p.identity, track: cam.track, isLocal, speaking: p.isSpeaking, micOn: p.isMicrophoneEnabled });
+        }
       }
     }
     const lp = room?.localParticipant;
@@ -292,6 +337,8 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       error,
       participants,
       screenShares,
+      cameras,
+      cameraOn: lp ? lp.isCameraEnabled : false,
       muted: lp ? !lp.isMicrophoneEnabled : true,
       deafened,
       sharing: lp ? lp.isScreenShareEnabled : false,
@@ -302,10 +349,11 @@ export function VoiceProvider({ children }: { children: ReactNode }) {
       toggleMute,
       toggleDeafen,
       toggleShare,
+      toggleCamera,
     };
     // version drives recomputation from the mutable LiveKit room
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [version, roomId, status, error, deafened, listenOnly, join, leave, toggleMute, toggleDeafen, toggleShare]);
+  }, [version, roomId, status, error, deafened, listenOnly, join, leave, toggleMute, toggleDeafen, toggleShare, toggleCamera]);
 
   return (
     <VoiceContext.Provider value={value}>

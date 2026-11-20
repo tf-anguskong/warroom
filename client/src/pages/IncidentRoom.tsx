@@ -21,6 +21,7 @@ import { TimelineView } from '../components/TimelineView';
 import { InvestigateView } from '../components/InvestigateView';
 import { RosterView } from '../components/RosterView';
 import { Icons } from '../components/ui';
+import { DashboardView } from '../components/DashboardView';
 
 export function IncidentRoom() {
   const { id } = useParams();
@@ -39,6 +40,7 @@ function parseView(s: string | null): View | null {
   if (s === 'roster') return { kind: 'roster' };
   if (s === 'files') return { kind: 'files' };
   if (s === 'schedule') return { kind: 'schedule' };
+  if (s === 'dashboard') return { kind: 'dashboard' };
   const [kind, id] = s.split(':');
   if ((kind === 'channel' || kind === 'sheet' || kind === 'note') && id) return { kind, id };
   return null;
@@ -106,7 +108,7 @@ function Room({ incidentId }: { incidentId: string }) {
     if (requested?.kind === 'channel' && state.channels.some((c) => c.id === requested.id)) return requested;
     if (requested?.kind === 'sheet' && state.sheets.some((s) => s.id === requested.id)) return requested;
     if (requested?.kind === 'note' && state.notes.some((n) => n.id === requested.id)) return requested;
-    if (requested?.kind === 'timeline' || requested?.kind === 'investigate' || requested?.kind === 'roster') return requested;
+    if (requested?.kind === 'timeline' || requested?.kind === 'investigate' || requested?.kind === 'roster' || requested?.kind === 'dashboard') return requested;
     if ((requested?.kind === 'files' || requested?.kind === 'schedule') && !me.isGuest) return requested;
     return state.channels[0] ? { kind: 'channel', id: state.channels[0].id } : { kind: 'timeline' };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -190,6 +192,8 @@ function Room({ incidentId }: { incidentId: string }) {
     };
     const onMuted = (e: { incidentId: string; by: string }) =>
       e.incidentId === incidentId && toast({ text: `${e.by} muted your microphone. Unmute with the mic button or Ctrl+Shift+M.`, tone: 'warn' }, 8000);
+    const onCameraOff = (e: { incidentId: string; by: string }) =>
+      e.incidentId === incidentId && toast({ text: `${e.by} turned off your camera. Turn it back on with the camera button.`, tone: 'warn' }, 8000);
     const onRemoved = (e: { incidentId: string; name: string; by: string }) =>
       e.incidentId === incidentId && toast({ text: `${e.by} removed you from ${e.name}`, tone: 'warn' }, 8000);
     const onAssigned = (e: AssignedEvent) => {
@@ -257,6 +261,7 @@ function Room({ incidentId }: { incidentId: string }) {
     s.on('mention', onMention);
     s.on('voice:moved', onMoved);
     s.on('voice:muted', onMuted);
+    s.on('voice:camera-off', onCameraOff);
     s.on('voice:removed', onRemoved);
     s.on('assigned', onAssigned);
     s.on('task:set', onTaskSet);
@@ -278,6 +283,7 @@ function Room({ incidentId }: { incidentId: string }) {
       s.off('mention', onMention);
       s.off('voice:moved', onMoved);
       s.off('voice:muted', onMuted);
+      s.off('voice:camera-off', onCameraOff);
       s.off('voice:removed', onRemoved);
       s.off('assigned', onAssigned);
       s.off('task:set', onTaskSet);
@@ -356,6 +362,7 @@ function Room({ incidentId }: { incidentId: string }) {
           {view.kind === 'note' && <NoteView key={view.id} noteId={view.id} state={state} presence={presence} />}
           {view.kind === 'timeline' && <TimelineView state={state} onOpenChannel={(id) => setView({ kind: 'channel', id })} />}
           {view.kind === 'schedule' && <ScheduleView state={state} presence={presence} />}
+          {view.kind === 'dashboard' && <DashboardView incidentId={state.incident.id} />}
           {view.kind === 'files' && <FilesView state={state} onOpenChannel={(id) => setView({ kind: 'channel', id })} onOpenNote={(id) => setView({ kind: 'note', id })} />}
           {view.kind === 'roster' && <RosterView state={state} presence={presence} onOpenChannel={(id) => setView({ kind: 'channel', id })} />}
           {view.kind === 'investigate' && (
