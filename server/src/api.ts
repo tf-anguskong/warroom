@@ -27,6 +27,7 @@ import { attachmentsOf, attachToMessage, filesForExport, pendingUploads } from '
 import { shiftsForExport, shiftsOf } from './shifts.js';
 import { linkedProviders, providerLabel, ssoProviders } from './sso.js';
 import { currentAgent } from './agent-context.js';
+import { timelineToWebhooks } from './webhooks.js';
 
 interface IncidentRow {
   id: string;
@@ -189,6 +190,7 @@ export function addTimeline(
     ref,
   };
   emitToIncident(incidentId, 'timeline:new', entry);
+  timelineToWebhooks(incidentId, type, text, ref, userId, agentName);
   return entry;
 }
 
@@ -504,7 +506,7 @@ api.post(
       return n;
     });
     addTimeline(id, user.id, 'declared', `${incidentKey(number)} declared at ${severity}: ${title}`);
-    addTimeline(id, user.id, 'role', `${user.display_name} is Incident Commander`);
+    addTimeline(id, user.id, 'role', `${user.display_name} is Incident Commander`, { role: 'commander' });
     emitDashboard();
     bus.emit("incident:declared", { incidentId: id, userId: user.id });
     return { id, key: incidentKey(number) };
@@ -720,7 +722,7 @@ api.put(
         userId,
         now(),
       );
-      addTimeline(inc.id, req.user!.id, 'role', `${target.display_name} assigned as ${role.label}`);
+      addTimeline(inc.id, req.user!.id, 'role', `${target.display_name} assigned as ${role.label}`, { role: role.key });
       systemNotice(inc.id, `${target.display_name} is now **${role.label}**`);
     } else {
       q.run('DELETE FROM incident_roles WHERE incident_id = ? AND role = ?', inc.id, role.key);
@@ -758,7 +760,7 @@ function handOffCommand(req: Request, inc: IncidentRow) {
   const text = to
     ? `Incident Command ${prev ? `handed from ${prev.display_name} to ${to.display_name}` : `assigned to ${to.display_name}`} (${by})`
     : `Incident Command released by ${actor.display_name}${prev ? ` (was ${prev.display_name})` : ''}`;
-  addTimeline(inc.id, actor.id, 'role', note ? `${text}. Handoff note: ${note}` : text);
+  addTimeline(inc.id, actor.id, 'role', note ? `${text}. Handoff note: ${note}` : text, { role: 'commander' });
   // Whoever asked has their answer now.
   q.run('DELETE FROM command_requests WHERE incident_id = ?', inc.id);
   systemNotice(inc.id, to ? `🎖 **${to.display_name}** is now **Incident Commander**${prev ? ` (from ${prev.display_name})` : ''}${note ? ` — ${note}` : ''}` : `Incident Command is **unassigned**`);

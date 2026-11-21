@@ -280,6 +280,12 @@ export function Sidebar({ state, presence, view, unread, mentions, onView, onJoi
               <span className="nav-label">Who’s doing what</span>
             </button>
           </div>
+          <div className={`nav-item ${view.kind === 'webhooks' ? 'active' : ''}`}>
+            <button className="nav-main" onClick={() => onView({ kind: 'webhooks' })}>
+              <span className="nav-icon">{Icons.megaphone}</span>
+              <span className="nav-label">Webhooks</span>
+            </button>
+          </div>
           <div className={`nav-item ${view.kind === 'schedule' ? 'active' : ''}`}>
             <button className="nav-main" onClick={() => onView({ kind: 'schedule' })}>
               <span className="nav-icon">{Icons.calendar}</span>

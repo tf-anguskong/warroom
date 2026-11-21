@@ -37,6 +37,8 @@ server/src/
   email-login.ts  sign-in with emailed or admin-issued codes for accounts without SSO
   dashboard.ts    war room dashboard (status board + people and coverage), computed from the timeline, template
                   sheets (found by column name), presence and shifts; comms cadence per severity is config.comms
+  webhooks.ts     outbound webhooks (Slack, Discord, Mattermost, Teams, generic signed JSON): global (admins) and per
+                  room (canControl); fed by addTimeline; encrypted URLs, SSRF-guarded delivery queue. Not in archives
   shifts.ts       shift schedule; a 30 s ticker sends reminders and start/end notices (flags on each row so each fires once)
   guests.ts       guest invites, scopes, deny-by-default route allowlist, email codes, sweeper
   join-requests.ts  "Ask to join" from the room link (public /auth/rooms routes); admitting makes a normal invite.
@@ -82,6 +84,11 @@ scripts/capture-showcase.mjs   seeds a fictional incident and regenerates docs/i
 - `canControl` is always false inside an agent request (`currentAgent()`), so moderation, roles, invites and admin can never be reached by an agent.
 - Messages and timeline entries record `agent` (the agent's name) when an agent made them; show it wherever the author is shown.
 - New MCP tools go in `mcp.ts` and call the REST API through `call()`, never the database directly. Tool output that contains content from people or providers must be labelled as data.
+
+**Outbound webhooks.**
+- Webhook URLs are secrets: `secret_enc` only, never returned (show `url_hint`). Delivery goes through `post()` with `guardedLookup` (no internal addresses after DNS unless `config.webhooks.allowPrivate`), no redirects, retries only on 5xx/429/network.
+- New webhook events: map a timeline type (or a `ref` marker) in `timelineToWebhooks`, add it to `EVENTS` with a label, and format it in `messageFor`. Respect `detail === 'brief'`: no titles, text or names.
+- Defuse mentions in anything sent (`defuse`, Slack escaping, Discord `allowed_mentions`).
 
 **Identity.**
 - Entra accounts are matched by object ID, then UPN. Never use Entra's `email` claim to find an account (users can edit it). Okta email is trusted.

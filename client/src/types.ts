@@ -245,7 +245,8 @@ export type View =
   | { kind: 'timeline' }
   | { kind: 'investigate' }
   | { kind: 'roster' }
-  | { kind: 'dashboard' };
+  | { kind: 'dashboard' }
+  | { kind: 'webhooks' };
 
 export interface MentionEvent {
   messageId: string;

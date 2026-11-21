@@ -116,6 +116,13 @@ export const config = {
     /** Let MCP clients register themselves (OAuth dynamic client registration), as Claude does. */
     dynamicClients: bool(env.MCP_DYNAMIC_CLIENTS, true),
   },
+  /** Outbound webhooks (Slack, Discord, Mattermost, Teams, generic). */
+  webhooks: {
+    /** The IC and room admins can add webhooks for their own war room. */
+    room: bool(env.WEBHOOKS_ROOM, true),
+    /** Allow http and internal/private addresses (for a self-hosted Mattermost on the internal network). */
+    allowPrivate: bool(env.WEBHOOKS_ALLOW_PRIVATE, false),
+  },
   /** Expected minutes between status updates (Comms Log) per severity, for the dashboard. 0 = no expectation. */
   comms: {
     SEV1: Number(env.COMMS_SEV1_MINUTES ?? 30),

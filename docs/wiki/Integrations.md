@@ -11,6 +11,50 @@ Connect integrations in **Admin → Integrations**, then use them from **Investi
 | **CrowdStrike Falcon** | Falcon cloud + API client ID / secret with **Hosts: Read** and **Alerts: Read** | Host lookup, alerts, tracked endpoints |
 | **Email (SMTP)** | Set in Settings → Email | Status card and a **Send test email** field |
 
+## Outbound webhooks
+
+War Room can post incident updates to **Slack, Discord, Mattermost, Microsoft Teams** (Workflows) or any endpoint that takes **JSON**.
+
+![Webhooks in a war room](../images/webhooks.png)
+
+| Where | Who | What it's for |
+|---|---|---|
+| **Admin → Webhooks** (global) | Admins | Every incident, filtered by severity: for example declarations and status changes to a security leadership channel |
+| **Webhooks** in a war room (left sidebar) | The IC and room admins manage; everyone in the room can see them | That incident only: for example an incident channel, or the finance team's Teams channel |
+
+**Events** (tick which ones each webhook sends):
+
+| Event | Sent when |
+|---|---|
+| Incident declared | A new incident is declared (global webhooks only) |
+| Severity changed / Status changed | Including resolved |
+| Incident Commander changed | Command assigned, handed off or released |
+| Decisions, Findings, Actions | Someone adds one to the timeline |
+| Pinned messages | A message is pinned |
+| Evidence added | Evidence is uploaded (name and SHA-256) |
+| Updates posted from the war room | Someone uses **Post an update** |
+
+Defaults: global webhooks send declarations, severity, status and command changes; room webhooks send severity, status, command, decisions and posted updates.
+
+**Detail.** *Full* sends the incident title, the text of decisions and updates, and who did it (marked when an AI agent did it for someone). *Headline only* sends the incident key, severity, status and a link, and nothing else: use it for sensitive incidents or wide audiences.
+
+**Post an update.** In the room's Webhooks view, the IC, room admins and the **Comms Lead** can write an update and send it to the webhooks that take updates (room and global). It goes on the timeline with their name.
+
+**Test, pause, failures.** **Test** sends a test message and shows the result. Each webhook shows when it last sent and the last error. War Room retries timeouts and server errors twice with back-off, doesn't retry other errors, never follows redirects, keeps each webhook's messages in order, and sends at most 30 per minute per webhook.
+
+**Formats.** Slack and Mattermost get a coloured attachment; Discord an embed (with mentions disabled); Teams an Adaptive Card with an *Open war room* button. The generic format is plain JSON (`event`, `at`, `headline`, `text`, `actor`, `agent`, `incident`), signed: `X-WarRoom-Signature: sha256=<HMAC of "timestamp.body">` with `X-WarRoom-Timestamp`, using a signing secret shown once when the webhook is created.
+
+**Setting one up:**
+
+| Service | Get the URL from |
+|---|---|
+| Slack | Apps → *Incoming Webhooks* → Add to a channel (`https://hooks.slack.com/services/…`) |
+| Discord | Channel settings → Integrations → Webhooks → New Webhook → Copy Webhook URL |
+| Mattermost | Integrations → Incoming Webhooks → Add |
+| Teams | In the channel: ⋯ → Workflows → *Post to a channel when a webhook request is received* |
+
+**Safety.** A webhook URL works like a password for its channel, so it's encrypted at rest and never shown again (only its host and last characters). Requests go only over https, to Slack's, Discord's and Microsoft's own hosts for those kinds, and never to internal network addresses, checked after DNS resolution too, unless an admin turns on **Settings → Webhooks → Allow internal addresses** (for a self-hosted Mattermost inside your network). Text can't ping `@everyone`, `@here` or `@channel`. Room webhook changes go on the timeline; global ones in the admin activity log. Guests and AI agents can't see or use webhooks. Room webhooks aren't included in room archives (their URLs are secrets of this server).
+
 ## Read-only by design
 
 Integrations only need read scopes, and **nothing is written back**: War Room never suspends a user, clears a session or contains a host. Containment you do in Falcon shows up in the room within a minute.

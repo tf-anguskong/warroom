@@ -7,6 +7,7 @@ import { Avatar, Icons, Modal } from '../components/ui';
 import { AdminIntegrations } from '../components/AdminIntegrations';
 import { AdminSettings } from '../components/AdminSettings';
 import { AdminAgents } from '../components/Agents';
+import { AdminWebhooks } from '../components/Webhooks';
 
 interface AdminSources {
   granted: boolean;
@@ -77,7 +78,7 @@ export function Admin() {
   const [loginCode, setLoginCode] = useState<{ code: string; name: string; email: string } | null>(null);
   const [params, setParams] = useSearchParams();
   const t = params.get('tab');
-  const tab = t === 'integrations' || t === 'settings' || t === 'agents' ? t : 'people';
+  const tab = t === 'integrations' || t === 'settings' || t === 'agents' || t === 'webhooks' ? t : 'people';
 
   const load = useCallback(() => {
     api.get<Directory>('/api/admin/directory').then(setDir);
@@ -133,6 +134,9 @@ export function Admin() {
           <button className={tab === 'integrations' ? 'on' : ''} onClick={() => setParams({ tab: 'integrations' })}>
             {Icons.plug} Integrations
           </button>
+          <button className={tab === 'webhooks' ? 'on' : ''} onClick={() => setParams({ tab: 'webhooks' })}>
+            {Icons.megaphone} Webhooks
+          </button>
           <button className={tab === 'agents' ? 'on' : ''} onClick={() => setParams({ tab: 'agents' })}>
             {Icons.plug} AI agents
           </button>
@@ -146,6 +150,8 @@ export function Admin() {
           <AdminSettings onChanged={load} />
         ) : tab === 'agents' ? (
           <AdminAgents />
+        ) : tab === 'webhooks' ? (
+          <AdminWebhooks />
         ) : tab === 'integrations' ? (
           <AdminIntegrations onChanged={load} />
         ) : (

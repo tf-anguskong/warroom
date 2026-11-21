@@ -14,7 +14,7 @@ This wiki explains each feature and setting in depth. For a short overview with 
 | [People and access](People-and-Access.md) | Responders, guests, single-use invites, asking to join from the room link, codes, getting people back in, who can do what |
 | [Sign-in and provisioning](Sign-in-and-Provisioning.md) | Okta, Entra ID (OIDC and SAML), SCIM, sign-in with an emailed code, how accounts are matched, admins |
 | [Settings reference](Settings-Reference.md) | Every field in Admin → Settings, and the few environment variables that remain |
-| [Integrations](Integrations.md) | Okta, Sumo Logic and CrowdStrike in the Investigate view, live watches, tracked endpoints, who can search |
+| [Integrations](Integrations.md) | Okta, Sumo Logic and CrowdStrike in the Investigate view, live watches, tracked endpoints, who can search; outbound webhooks to Slack, Discord, Mattermost, Teams |
 | [AI agents (MCP)](AI-Agents.md) | Connecting Claude and other agents with sign-in or a room key, the tools they get, who sees and disconnects them, security |
 | [Operations](Operations.md) | Docker deployment, ports and DNS, backups, moving rooms between servers, setup and recovery links, upgrades, troubleshooting |
 | [Security model](Security-Model.md) | What's protected and how: guests, sign-in, codes and links, files, secrets, audit trail, known limits |

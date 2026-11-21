@@ -309,6 +309,18 @@ await agent('POST', `/api/channels/${g.id}/messages`, {
   d.close();
 }
 
+// Webhooks (added last, so nothing is actually sent while seeding): a global one for leadership and two for this room.
+{
+  const hook = (path, body) => jordan('POST', path, body);
+  await hook('/api/admin/webhooks', { kind: 'slack', name: '#security-leadership', url: 'https://hooks.slack.com/services/T000/B000/showcase', minSeverity: 'SEV2', detail: 'brief' });
+  await hook(`/api/incidents/${I}/webhooks`, { kind: 'slack', name: '#inc-ransomware', url: 'https://hooks.slack.com/services/T000/B001/showcase', events: ['incident.severity', 'incident.status', 'incident.commander', 'timeline.decision', 'timeline.finding', 'update.posted'] });
+  await hook(`/api/incidents/${I}/webhooks`, { kind: 'teams', name: 'Finance leadership (Teams)', url: 'https://prod-00.westus.logic.azure.com/workflows/showcase', events: ['incident.status', 'update.posted'], detail: 'brief' });
+  const { DatabaseSync } = await import('node:sqlite');
+  const d = new DatabaseSync(`${DATA}/warroom.db`);
+  d.prepare('UPDATE webhooks SET last_sent_at = ?, last_ok = 1').run(at(6));
+  d.close();
+}
+
 // ---------- screenshots ----------
 const chrome = spawn(CHROME, ['--headless=new', '--remote-debugging-port=9333', `--user-data-dir=${SCRATCH}/chrome-prof`, '--hide-scrollbars', '--no-first-run', '--mute-audio', 'about:blank']);
 let target;
@@ -385,6 +397,7 @@ if (want('admin')) {
   await shot('admin-settings');
 }
 if (want('people')) (await go('/admin', 3000), await shot('admin-people'));
+if (want('webhooks')) (await go(`${room}?view=webhooks`, 3000), await shot('webhooks'));
 if (want('agent-key')) {
   await go(`${room}?view=channel:${g.id}`, 3000);
   await click('AI agents');

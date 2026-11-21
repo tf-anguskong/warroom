@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
-export type SectionId = 'general' | 'incidents' | 'okta' | 'entra' | 'scim' | 'email' | 'voice' | 'agents';
+export type SectionId = 'general' | 'incidents' | 'okta' | 'entra' | 'scim' | 'email' | 'voice' | 'webhooks' | 'agents';
 type Kind = 'string' | 'url' | 'number' | 'bool' | 'enum' | 'list' | 'text' | 'secret';
 
 interface Field {
@@ -222,6 +222,20 @@ export const FIELDS: Field[] = [
     readOnly: () => (bundledLiveKit() ? 'Managed automatically for the LiveKit server that ships with War Room.' : null),
   },
 
+  // ---- Webhooks
+  {
+    key: 'webhooks.room', section: 'webhooks', kind: 'bool', env: ['WEBHOOKS_ROOM'],
+    label: 'Room webhooks',
+    help: 'The Incident Commander and room admins can add webhooks for their own war room (for example a channel for that incident). Off stops room webhooks from sending.',
+    base: () => envDefaults.webhooks.room, apply: (v) => (config.webhooks.room = Boolean(v)),
+  },
+  {
+    key: 'webhooks.allowPrivate', section: 'webhooks', kind: 'bool', env: ['WEBHOOKS_ALLOW_PRIVATE'],
+    label: 'Allow internal addresses',
+    help: 'Let webhooks post to http and to internal network addresses, for a self-hosted Mattermost or chat server inside your network. Leave off otherwise: it stops a webhook URL from reaching internal systems.',
+    base: () => envDefaults.webhooks.allowPrivate, apply: (v) => (config.webhooks.allowPrivate = Boolean(v)),
+  },
+
   // ---- AI agents (MCP)
   {
     key: 'agents.enabled', section: 'agents', kind: 'bool', env: ['MCP_ENABLED'],
@@ -271,6 +285,7 @@ export const SECTIONS: { id: SectionId; label: string; description: string }[] =
   { id: 'scim', label: 'Provisioning (SCIM)', description: 'Let Okta or Entra create, update and deactivate accounts.' },
   { id: 'email', label: 'Email', description: 'SMTP for guest sign-in codes.' },
   { id: 'voice', label: 'Voice (LiveKit)', description: 'The media server for voice rooms and screen share.' },
+  { id: 'webhooks', label: 'Webhooks', description: 'Post incident updates to Slack, Discord, Mattermost, Teams or any JSON endpoint. Global webhooks are under Admin → Webhooks.' },
   { id: 'agents', label: 'AI agents (MCP)', description: 'Let AI agents such as Claude read and work in war rooms, on behalf of a person.' },
 ];
 
@@ -455,6 +470,8 @@ function sectionStatus(id: SectionId) {
       return config.livekit.url && config.livekit.apiKey && config.livekit.apiSecret ? 'on' : 'incomplete';
     case 'agents':
       return config.agents.enabled ? 'on' : 'off';
+    case 'webhooks':
+      return 'on';
     default:
       return 'on';
   }

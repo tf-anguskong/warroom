@@ -61,6 +61,10 @@ Every war room has a **dashboard**: how long the incident has spent in each phas
 
 ![War room dashboard](images/dashboard-board.png)
 
+### Keep everyone else informed
+
+Post updates to **Slack, Teams, Discord or Mattermost** straight from the war room, and let status changes and decisions flow to the right channels automatically: leadership gets declarations and status changes for every serious incident, the incident's own channel gets the detail. Sensitive incidents can send headlines only.
+
 ### A timeline that writes itself
 
 Findings, decisions and actions people add, plus everything War Room records on its own: severity and status changes, role and command changes, who joined and left, searches run, evidence added. Back-date entries when you learn the real time later, then **export the postmortem** as Markdown.

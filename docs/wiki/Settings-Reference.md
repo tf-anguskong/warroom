@@ -75,6 +75,15 @@ Send a test email from **Admin → Integrations → Email (SMTP)**. In developme
 | LiveKit address for the server (optional) | Used to mute, move and remove people. Empty uses the browser address. | `LIVEKIT_API_URL` |
 | API key / API secret | Managed automatically with the bundled LiveKit. | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` |
 
+## Webhooks
+
+| Setting | What it does | Default / env |
+|---|---|---|
+| Room webhooks | The IC and room admins can add webhooks for their own war room. Off also stops room webhooks from sending. | on · `WEBHOOKS_ROOM` |
+| Allow internal addresses | Let webhooks post over http and to internal network addresses (for a self-hosted Mattermost or chat server inside your network). | off · `WEBHOOKS_ALLOW_PRIVATE` |
+
+Global webhooks themselves are managed under **Admin → Webhooks**. See [Integrations](Integrations.md#outbound-webhooks).
+
 ## AI agents (MCP)
 
 | Setting | What it does | Default / env |

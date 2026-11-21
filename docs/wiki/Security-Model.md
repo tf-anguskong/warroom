@@ -58,6 +58,13 @@ War Room holds sensitive material during the worst days of an organisation's yea
 - Responder input is validated and quoted before it goes into a provider query.
 - Every search is on the timeline; who may search is configurable per integration.
 
+## Outbound webhooks
+
+- Webhook URLs are encrypted at rest and never returned to the browser.
+- Requests go only over https, to the provider's own hosts for Slack, Discord and Teams, never to internal or link-local addresses (checked after DNS resolution, so a public name can't point inside), and never follow redirects, unless an admin allows internal addresses.
+- Content can't ping `@everyone` / `@channel`; *Headline only* sends no titles or details.
+- Global webhooks are admin-only; room webhooks are limited to the IC and room admins, and every change is on the timeline.
+
 ## AI agents (MCP)
 
 - An agent acts for **one person**, with no more access than they have, and is marked with its name on everything it does.
