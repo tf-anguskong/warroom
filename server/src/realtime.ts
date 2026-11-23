@@ -4,6 +4,7 @@ import { userFromCookieHeader } from './auth.js';
 import { q } from './db.js';
 import { bus, getUser, type UserRow } from './users.js';
 import { canSee } from './guests.js';
+import { sameOrigin } from './hardening.js';
 
 export interface Away {
   since: string;
@@ -154,7 +155,12 @@ export function activeCounts(): Record<string, { present: number; inVoice: numbe
 }
 
 export function initRealtime(server: HttpServer) {
-  io = new Server(server, { path: '/socket.io', serveClient: false });
+  io = new Server(server, {
+    path: '/socket.io',
+    serveClient: false,
+    // The session cookie is the credential, so only War Room's own pages may open a socket with it.
+    allowRequest: (req, cb) => cb(null, sameOrigin(req.headers)),
+  });
   recheckPresenceAfterStart();
 
   io.use(async (socket, next) => {
@@ -242,6 +248,11 @@ export function initRealtime(server: HttpServer) {
 
 /** Events guests may receive; everything else sent to an incident goes to organization members only. */
 const GUEST_EVENTS = new Set(['incident:refresh', 'presence', 'voice:summon']);
+
+/** Shutdown: disconnects every socket, then closes the HTTP server (resolves once it has closed). */
+export function closeRealtime() {
+  return new Promise<void>((resolve) => (io ? io.close(() => resolve()) : resolve()));
+}
 
 /**
  * Send to everyone in an incident's war room. Guests only get events on GUEST_EVENTS, plus

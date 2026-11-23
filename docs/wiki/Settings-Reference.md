@@ -15,6 +15,7 @@ All server configuration lives in **Admin → Settings**, stored in the database
 |---|---|---|
 | Public address | The address people use to reach War Room. Sign-in callbacks, invite links and SCIM use it. | `PUBLIC_URL` |
 | Sign-in lasts (hours) | How long before people sign in again (1–168). | 12 · `SESSION_HOURS` |
+| Reverse proxies in front of War Room | How many proxies pass requests to War Room (0–5). Client addresses for rate limits use that many `X-Forwarded-For` entries and no more. Use 0 if browsers connect directly. | 1 · `TRUST_PROXY_HOPS` |
 | Make admin on sign-in | Usernames or emails that become admins the next time they sign in. | `BOOTSTRAP_ADMINS` |
 | Sign in with an emailed code | Accounts not linked to Okta or Entra sign in with a code sent to their email. Needs email. | off (on in War Room NOW) · `EMAIL_LOGIN` |
 | Largest file upload (MB) | Size limit for screenshots, logs and evidence (1–4096). | 100 · `MAX_UPLOAD_MB` |

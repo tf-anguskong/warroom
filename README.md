@@ -131,7 +131,7 @@ There is no `.env` file. Everything else is configured in **Admin → Settings**
 
 | Section | What's there |
 |---|---|
-| General | Public address, how long a sign-in lasts, people to make admin on their next sign-in, development sign-in (never in production) |
+| General | Public address, how long a sign-in lasts, how many reverse proxies are in front (for client addresses), people to make admin on their next sign-in, development sign-in (never in production) |
 | Incidents | How often a status update is expected at each severity (for the dashboard) |
 | Okta | Issuer, client ID and secret, scopes, admin group, create accounts on first sign-in |
 | Microsoft Entra ID | Tenant, OIDC or SAML, client ID and secret or signing certificate, admin group or app role |
@@ -255,6 +255,8 @@ Integrations are read-only: nothing is changed in Okta or Sumo Logic. Response a
 - The war room link is safe to share widely: on its own it only lets someone ask. Check who's asking another way before letting them in, especially without email, where the address they give isn't verified.
 - Chat, sheets, notes, uploaded files, search results and the timeline are stored unencrypted in SQLite; protect the volume and its backups accordingly.
 - Voice is not recorded.
+- Requests that change something with the sign-in cookie, and live-update connections, must come from War Room's own address (the Public address, or the host the request was sent to); anything from another site is refused.
+- Client addresses (used for rate limits) come from `X-Forwarded-For` only as far as **Reverse proxies in front of War Room** allows (1 for the bundled Caddy). Set it to 0 if browsers reach War Room directly, or the header could be forged to dodge limits.
 - AI agents act as the person who approved them, so treat an agent's access like that person's. Room agent keys are bearer secrets: keep lifetimes short. Agents are told to treat what they read as data, but content in a war room can still try to mislead them (prompt injection); approve **write** access only when you need it, and review what they post.
 
 ## License

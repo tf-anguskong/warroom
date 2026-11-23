@@ -25,6 +25,8 @@ server/src/
   config.ts       env-derived starting values (envDefaults) and the live `config` object
   settings.ts     Admin → Settings: field registry, DB storage, validation, Test, live apply
   setup*.ts       one-time setup/recovery links (setup-token.ts has no app imports: used by the CLI)
+  hardening.ts    same-origin check (originGuard for cookie writes, Socket.IO allowRequest), JSON error handler,
+                  404s for unknown API paths, graceful shutdown (SIGTERM closes sockets, then the DB)
   db.ts           node:sqlite schema + additive migrations, `q` helpers, `tx`
   auth.ts         sessions (JWT cookie), OIDC (Okta, Entra), SAML (Entra), dev login, requireAuth
   sso.ts          provider list and SSO → user matching
@@ -72,6 +74,12 @@ scripts/capture-showcase.mjs   seeds a fictional incident and regenerates docs/i
 - Secrets use kind `secret`: encrypted at rest, never returned to the browser (only `isSet`), never written to the audit log. An empty secret in a save means "keep".
 - Only process-level values stay in the environment: `PORT`, `DATA_DIR`, `NODE_ENV`, `CLIENT_DIST`, `LIVEKIT_KEY_FILE`, and the optional `SESSION_SECRET` / `INTEGRATIONS_KEY` overrides.
 - Development sign-in can never be on in production.
+
+**Requests from browsers.**
+- Cookie-authenticated writes go through `originGuard`: they must come from `config.publicUrl` or the request's own host. A route that must accept a cross-site POST (like SAML's ACS) goes in `CROSS_SITE_OK` in `hardening.ts`, and must not trust the session cookie.
+- `req.ip` is only as good as `config.proxyHops` (Admin → Settings); never read `X-Forwarded-For` yourself.
+- Express 4 doesn't catch errors thrown by `async` handlers: wrap the body in try/catch (or call `next(err)`) so the request doesn't hang.
+- CI (`.github/workflows/ci.yml`) runs typecheck, build, `npm audit --omit=dev --audit-level=high` and CodeQL.
 
 **Guests are deny-by-default.**
 - `requireAuth` runs `guestAllowed`. A new `/api` route is closed to guests unless it is added to `RULES` in `guests.ts` with a scope check.

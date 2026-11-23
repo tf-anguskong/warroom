@@ -9,12 +9,13 @@ import { ssoProviders } from './sso.js';
 import { guestsRouter, inviteAuthRouter, startGuestSweeper } from './guests.js';
 import { joinRequestAuthRouter, joinRequestsRouter } from './join-requests.js';
 import { requireAuth } from './auth.js';
-import './db.js';
 import { authRouter } from './auth.js';
 import { scimRouter } from './scim.js';
 import { api } from './api.js';
 import { integrationsRouter } from './integrations/index.js';
-import { initRealtime } from './realtime.js';
+import { closeRealtime, initRealtime } from './realtime.js';
+import { db } from './db.js';
+import { errorHandler, installShutdown, notFound, originGuard } from './hardening.js';
 import { applySettings, settingsRouter } from './settings.js';
 import { notesRouter } from './notes.js';
 import { filesRouter } from './files.js';
@@ -32,12 +33,14 @@ applySettings();
 
 const app = express();
 app.disable('x-powered-by');
-app.set('trust proxy', true);
+// Believe only as many X-Forwarded-For hops as there are proxies (Admin → Settings), read live.
+app.set('trust proxy', (_addr: string, hop: number) => hop < config.proxyHops);
 
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('X-Frame-Options', 'DENY');
+  if (config.publicUrl.startsWith('https://')) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
 
@@ -48,6 +51,8 @@ app.use('/scim/v2', scimRouter);
 
 app.use(cookieParser());
 app.use(express.json({ limit: '2mb' }));
+// Cookie-authenticated writes must come from War Room's own pages.
+app.use(originGuard);
 // AI agents: OAuth for MCP clients and the MCP server itself (bearer tokens, no cookies).
 app.use(oauthRouter);
 app.use(mcpRouter);
@@ -70,6 +75,7 @@ app.use('/api', requireAuth, loginCodeRouter);
 app.use('/api', requireAuth, agentsRouter);
 app.use('/api', requireAuth, dashboardRouter);
 app.use('/api', requireAuth, webhooksRouter);
+app.use(['/api', '/auth', '/oauth'], notFound);
 
 const here = dirname(fileURLToPath(import.meta.url));
 const clientDist = resolve(process.env.CLIENT_DIST ?? join(here, '../../client/dist'));
@@ -78,10 +84,13 @@ if (existsSync(clientDist)) {
   app.get(/^\/(?!api\/|auth\/|scim\/|socket\.io\/|oauth\/|mcp$|\.well-known\/).*/, (_req, res) => res.sendFile(join(clientDist, 'index.html')));
 }
 
+app.use(errorHandler);
+
 const server = createServer(app);
 initRealtime(server);
 startGuestSweeper();
 startAgentSweeper();
+installShutdown(server, closeRealtime, () => db.close());
 
 server.listen(config.port, () => {
   const addr = server.address();

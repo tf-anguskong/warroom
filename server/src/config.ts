@@ -49,6 +49,11 @@ export const config = {
   dataDir,
   sessionSecret,
   sessionHours: Number(env.SESSION_HOURS ?? 12),
+  /**
+   * How many reverse proxies sit in front of War Room. Only that many X-Forwarded-For hops are
+   * believed when working out a client's address (rate limits, logs). The bundled Caddy is 1.
+   */
+  proxyHops: Number(env.TRUST_PROXY_HOPS ?? 1),
   /** Name/email login with no password. Never enable in production. */
   devAuth: bool(env.DEV_AUTH, !production),
   oidc: {

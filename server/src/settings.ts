@@ -72,6 +72,12 @@ export const FIELDS: Field[] = [
     base: () => envDefaults.sessionHours, apply: (v) => (config.sessionHours = v),
   },
   {
+    key: 'proxyHops', section: 'general', kind: 'number', min: 0, max: 5, env: ['TRUST_PROXY_HOPS'],
+    label: 'Reverse proxies in front of War Room',
+    help: 'How many proxies (Caddy, a load balancer) pass requests on to War Room. Client addresses for rate limits come from that many X-Forwarded-For entries and no more. 1 for the bundled Caddy; 0 if browsers connect to War Room directly.',
+    base: () => envDefaults.proxyHops, apply: (v) => (config.proxyHops = v),
+  },
+  {
     key: 'bootstrapAdmins', section: 'general', kind: 'list', env: ['BOOTSTRAP_ADMINS'],
     label: 'Make admin on sign-in',
     help: 'Usernames or emails that become admins the next time they sign in. Useful before those people have an account.',
