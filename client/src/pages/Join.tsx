@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import { api, ApiError } from '../lib/api';
 import { SeverityBadge } from '../components/ui';
 import type { GuestScopeSummary, Severity, User } from '../types';

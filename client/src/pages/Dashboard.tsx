@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router';
 import { api } from '../lib/api';
 import { useApp } from '../lib/app';
 import { getSocket } from '../lib/socket';

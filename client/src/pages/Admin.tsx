@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, Navigate, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useSearchParams } from 'react-router';
 import { api, ApiError } from '../lib/api';
 import { useApp } from '../lib/app';
 import { utcTime } from '../lib/format';

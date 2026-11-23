@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { api, ApiError } from '../lib/api';
 import { useApp } from '../lib/app';
 import { Icons, Modal } from './ui';

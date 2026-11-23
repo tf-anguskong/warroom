@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router';
 import { api, ApiError } from '../lib/api';
 import { useApp } from '../lib/app';
 import { getSocket } from '../lib/socket';

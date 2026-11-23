@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { api, ApiError } from '../lib/api';
 
 type Provider = { id: 'okta' | 'entra'; label: string; protocol: 'oidc' | 'saml' };

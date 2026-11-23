@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { api, ApiError } from '../lib/api';
 
 type Status = 'pending' | 'admitted' | 'denied' | 'cancelled' | 'expired' | 'used' | 'closed';
