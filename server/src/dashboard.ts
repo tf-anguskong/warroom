@@ -4,7 +4,7 @@ import { q } from './db.js';
 import { getUser, type UserRow } from './users.js';
 import { presenceFor } from './realtime.js';
 import { canSee } from './guests.js';
-import { incidentKey } from './api.js';
+import { incidentKey } from './model.js';
 import { STATUSES } from './templates.js';
 import type { Column } from './templates.js';
 

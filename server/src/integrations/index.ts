@@ -3,7 +3,9 @@ import { db, newId, now, q } from '../db.js';
 import { requireAuth } from '../auth.js';
 import { bus, getUser, isAdmin, logAdminAction, type UserRow } from '../users.js';
 import { emitToIncident, joinIncidentToChannel, refreshIncident } from '../realtime.js';
-import { addTimeline, createChannel, postMessage, systemNotice } from '../api.js';
+import { addTimeline } from '../timeline.js';
+import { postMessage, systemNotice } from '../messages.js';
+import { createChannel } from '../rooms.js';
 import { decryptSecret, encryptSecret } from './secrets.js';
 import { IntegrationError, normalizeBaseUrl, type TableResult } from './http.js';
 import {

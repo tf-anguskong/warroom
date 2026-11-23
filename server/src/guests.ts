@@ -7,6 +7,9 @@ import { newId, now, q, tx } from './db.js';
 import { createUser, getUser, isAdmin, logAdminAction, toPublic, updateUser, type UserRow } from './users.js';
 import { refreshIncident, resyncUserChannels, visibleChannelIds } from './realtime.js';
 import { codeSignInPossible, emailCanSend, emailLoginEnabled, issueLoginCode } from './email-login.js';
+import { systemNotice } from './messages.js';
+import { canControl, commanderOf } from './permissions.js';
+import { addTimeline } from './timeline.js';
 
 /**
  * Guests are people outside the identity provider (vendors, outside IR firms, counsel) who get a
@@ -204,7 +207,6 @@ export async function revokeGuest(userId: string, actorId: string | null, reason
   updateUser(g.id, { active: 0, guest_expires_at: now() }); // emits user:deactivated → sockets closed
   const rooms = q.all<{ id: string }>('SELECT id FROM voice_rooms WHERE incident_id = ?', g.guest_incident_id ?? '');
   await Promise.all(rooms.map((r) => livekit().removeParticipant(`warroom-${r.id}`, g.id).catch(() => undefined)));
-  const { addTimeline } = await import('./api.js');
   if (g.guest_incident_id) {
     const { revokeGrantsOf } = await import('./agents.js');
     revokeGrantsOf(g.id, g.guest_incident_id, actorId ? getUser(actorId) ?? null : null, 'the guest’s access ended');
@@ -251,7 +253,6 @@ const h =
 const str = (v: unknown, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
 async function requireControl(req: Request, incidentId: string) {
-  const { canControl } = await import('./api.js');
   if (req.user!.is_guest || !canControl(req.user!, incidentId)) {
     throw new HttpError(403, 'Only the Incident Commander or a room admin can manage guests');
   }
@@ -297,7 +298,6 @@ export const guestsRouter = Router();
 export async function canInviteMembers(user: UserRow, incidentId: string) {
   if (user.is_guest) return false;
   if (isAdmin(user)) return true;
-  const { canControl } = await import('./api.js');
   return canControl(user, incidentId);
 }
 
@@ -360,7 +360,6 @@ guestsRouter.post(
       createdBy: req.user!.id,
       codeMode: manual ? 'manual' : 'email',
     });
-    const { addTimeline } = await import('./api.js');
     const org = str(req.body?.org, 80);
     addTimeline(
       inc.id,
@@ -426,7 +425,6 @@ guestsRouter.post(
     const code = newCode();
     const minutes = status === 'ok' ? Math.max(30, Math.round((new Date(inv.expires_at).getTime() - Date.now()) / 60000)) : 30;
     q.run('UPDATE invites SET code_hash = ?, code_expires_at = ?, code_attempts = 0 WHERE id = ?', hashCode(inv.id, code), new Date(Date.now() + minutes * 60_000).toISOString(), inv.id);
-    const { addTimeline } = await import('./api.js');
     addTimeline(inv.incident_id, req.user!.id, 'guest', `${req.user!.display_name} issued a new code for ${guest ? guest.display_name : `the invite for ${inv.label}`}`);
     return { code, expiresInMinutes: minutes, forName: guest?.display_name ?? inv.label, signBackIn: Boolean(guest) };
   }),
@@ -479,7 +477,6 @@ guestsRouter.post(
     if (inc.status === 'resolved') throw new HttpError(400, 'This incident is resolved');
     const target = getUser(req.params.userId);
     if (!target) throw new HttpError(404, 'person not found');
-    const { addTimeline, commanderOf } = await import('./api.js');
     const blocked = signInCodeBlock(req.user!, inc.id, target, commanderOf(inc.id));
     if (blocked) throw new HttpError(400, blocked);
     const by = req.user!.display_name;
@@ -516,7 +513,6 @@ guestsRouter.delete(
     await requireControl(req, inv.incident_id);
     if (inv.used_at) throw new HttpError(400, 'Already used; end the guest’s access instead');
     q.run('UPDATE invites SET revoked_at = ?, revoked_by = ? WHERE id = ? AND revoked_at IS NULL', now(), req.user!.id, inv.id);
-    const { addTimeline } = await import('./api.js');
     addTimeline(inv.incident_id, req.user!.id, 'guest', `${req.user!.display_name} cancelled the guest invite for ${inv.label}`);
     refreshIncident(inv.incident_id);
     return { ok: true };
@@ -537,7 +533,6 @@ guestsRouter.put(
       revokeGrantsOf(g.id, inc.id, req.user!, 'the guest is no longer allowed to connect an AI agent');
     }
     const s = scopeSummary(inc.id, scope);
-    const { addTimeline } = await import('./api.js');
     addTimeline(
       inc.id,
       req.user!.id,
@@ -757,7 +752,6 @@ inviteAuthRouter.post('/auth/invite/:token/accept', async (req, res) => {
   });
   if (!guest) return res.status(410).json({ error: 'This link has already been used', status: 'used' });
   const g = getUser((guest as UserRow).id)!;
-  const { addTimeline, systemNotice } = await import('./api.js');
   const { startGuestSession } = await import('./auth.js');
   const inviter = getUser(inv.created_by)?.display_name ?? 'someone';
   const who = `${g.display_name}${inv.org ? ` (${inv.org})` : ''}`;
@@ -803,7 +797,6 @@ async function acceptMember(req: Request, res: Response, inv: InviteRow, display
   if (problem) return res.status(403).json({ error: problem });
   if (!user) return res.status(410).json({ error: 'This link has already been used', status: 'used' });
   const u = getUser((user as UserRow).id)!;
-  const { addTimeline, systemNotice } = await import('./api.js');
   const { startSession } = await import('./auth.js');
   const inviter = getUser(inv.created_by)?.display_name ?? 'someone';
   const how = inv.code_mode === 'manual' ? 'code from the inviter' : inv.code_mode === 'link' ? `let in from a join request (email ${maskEmail(email)} not verified)` : `email verified (${maskEmail(email)})`;
@@ -830,7 +823,6 @@ inviteAuthRouter.post('/auth/invite/:token/resume', async (req, res) => {
   if (!inv || !g) return res.status(410).json({ error: 'This guest access has ended' });
   const c = checkCode(inv, req.body?.code);
   if (c !== 'ok') return res.status(c === 'missing' ? 400 : 401).json({ error: codeError(inv, c), code: c });
-  const { addTimeline } = await import('./api.js');
   const { startGuestSession } = await import('./auth.js');
   addTimeline(inv.incident_id, g.id, 'guest', `${g.display_name} signed back in as a guest (${inv.email && inv.code_mode !== 'manual' ? `email code to ${maskEmail(inv.email)}` : 'code from the inviter'})`);
   const ttl = Math.max(60, Math.floor((new Date(g.guest_expires_at!).getTime() - Date.now()) / 1000));

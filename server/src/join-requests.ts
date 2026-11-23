@@ -5,6 +5,8 @@ import { emailCanSend } from './email-login.js';
 import { ACCESS_HOURS, canInviteMembers, cleanScope, insertInvite, maskEmail, unverifiedMemberBlock } from './guests.js';
 import { refreshIncident } from './realtime.js';
 import { logAdminAction, type UserRow } from './users.js';
+import { canControl } from './permissions.js';
+import { addTimeline } from './timeline.js';
 
 /**
  * Asking to join from the room's own link. Someone without an account opens the war room link, says
@@ -214,7 +216,6 @@ const h =
   };
 
 async function pendingFor(req: Request) {
-  const { canControl } = await import('./api.js');
   const user = req.user as UserRow;
   if (user.is_guest || !canControl(user, req.params.id)) throw new HttpError(403, 'Only the Incident Commander or a room admin can answer join requests');
   const inc = openIncident(req.params.id);
@@ -244,7 +245,6 @@ joinRequestsRouter.post(
       user.id, now(), kind, JSON.stringify(scope), accessHours, r.id,
     );
     if (done.changes !== 1) throw new HttpError(409, 'Someone already answered that request');
-    const { addTimeline } = await import('./api.js');
     addTimeline(inc.id, user.id, 'access', `${user.display_name} let ${who(r)} in as a ${kind === 'member' ? 'responder' : `guest (access for ${accessHours}h)`} from a request to join${r.note ? `: “${r.note}”` : ''}`);
     logAdminAction(user.id, null, 'join_request_admitted', `${r.name} <${maskEmail(r.email)}> as ${kind} → ${key(inc.number)}`);
     refreshIncident(inc.id);
@@ -258,7 +258,6 @@ joinRequestsRouter.post(
     const { inc, r, user } = await pendingFor(req);
     const done = q.run("UPDATE join_requests SET status = 'denied', decided_by = ?, decided_at = ? WHERE id = ? AND status = 'pending'", user.id, now(), r.id);
     if (done.changes !== 1) throw new HttpError(409, 'Someone already answered that request');
-    const { addTimeline } = await import('./api.js');
     addTimeline(inc.id, user.id, 'access', `${user.display_name} turned down a request to join from ${who(r)}`);
     logAdminAction(user.id, null, 'join_request_denied', `${r.name} <${maskEmail(r.email)}> → ${key(inc.number)}`);
     refreshIncident(inc.id);

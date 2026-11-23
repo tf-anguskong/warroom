@@ -5,6 +5,7 @@ import { q } from './db.js';
 import { bus, getUser, type UserRow } from './users.js';
 import { canSee } from './guests.js';
 import { sameOrigin } from './hardening.js';
+import { addTimeline } from './timeline.js';
 
 export interface Away {
   since: string;
@@ -128,7 +129,6 @@ async function commitPresence(incidentId: string, userId: string) {
     else if (!was.voice) text = `${name} joined ${room(is.voice)}`;
     else if (!is.voice) text = `${name} left ${room(was.voice)}`;
     else text = `${name} moved from ${room(was.voice)} to ${room(is.voice)}`;
-    const { addTimeline } = await import('./api.js');
     addTimeline(incidentId, userId, 'presence', text, null, pending.since);
   } catch (err) {
     console.error('[presence]', err instanceof Error ? err.message : err);

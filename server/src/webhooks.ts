@@ -8,7 +8,8 @@ import { config } from './config.js';
 import { db, newId, now, q } from './db.js';
 import { getUser, isAdmin, logAdminAction, type UserRow } from './users.js';
 import { decryptSecret, encryptSecret } from './integrations/secrets.js';
-import { addTimeline, canControl } from './api.js';
+import { canControl } from './permissions.js';
+import { addTimeline } from './timeline.js';
 import { SEVERITIES } from './templates.js';
 
 /**

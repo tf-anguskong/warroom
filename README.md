@@ -65,7 +65,13 @@ server/src/
   auth.ts       OIDC (Okta, Entra) and SAML (Entra) sign-in, dev login, sessions, bootstrap admins
   sso.ts        identity providers, mapping SSO identities onto users
   scim.ts       SCIM 2.0 /Users and /Groups for Okta or Entra provisioning
-  api.ts        incidents, roles, room control, voice rooms, channels, messages, timeline, sheets, export, admin
+  api.ts        mounts the core /api routes (routes/) behind sign-in
+  routes/       incidents (roles, command, room admins), voice, assignments, channels and messages, timeline and export, sheets, admin
+  model.ts      row types, lookups, incident keys
+  permissions.ts  who runs the room (IC, room admins, admins)
+  timeline.ts   timeline entries (live, and on to webhooks)
+  messages.ts   posting messages and system notices, mentions
+  rooms.ts      creating voice rooms, channels and sheets
   mail.ts       SMTP (nodemailer) and the guest code email; dev outbox when SMTP isn't set
   guests.ts     single-use guest invites, guest scope checks and the guest route allowlist, expiry sweeper
   join-requests.ts  asking to join from the room link; letting people in or turning them down

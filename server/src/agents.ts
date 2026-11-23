@@ -4,7 +4,9 @@ import { config } from './config.js';
 import { db, newId, now, q } from './db.js';
 import { getUser, isAdmin, logAdminAction, type UserRow } from './users.js';
 import { visibleChannelIds } from './realtime.js';
-import { addTimeline, canControl, incidentKey } from './api.js';
+import { incidentKey } from './model.js';
+import { canControl } from './permissions.js';
+import { addTimeline } from './timeline.js';
 import { guestAllowed, guestSessionValid, parseScope } from './guests.js';
 import type { AgentContext, AgentScope } from './agent-context.js';
 

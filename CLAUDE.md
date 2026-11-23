@@ -32,7 +32,14 @@ server/src/
   sso.ts          provider list and SSO → user matching
   users.ts        user rows, admin sources, audit log (logAdminAction)
   scim.ts         SCIM 2.0 (Okta / Entra provisioning)
-  api.ts          incidents, channels, messages, voice, roles, assignments, sheets, export, admin
+  api.ts          mounts routes/* under /api behind requireAuth (nothing else lives here)
+  routes/         incidents.ts (snapshot, severity/status, roles, command, room admins), voice.ts, assignments.ts,
+                  channels.ts (+ messages), timeline.ts (+ export.md), sheets.ts, admin.ts; common.ts has h() and str()
+  model.ts        row types, HttpError, mustIncident/mustChannel/mustSheet, incidentKey, STATUS_LABEL
+  permissions.ts  canControl, commanderOf, roomAdminIds, requireControl, requireAdmin
+  timeline.ts     addTimeline (emits live and feeds webhooks)
+  messages.ts     postMessage, systemNotice, serializeMessage, mentions
+  rooms.ts        createVoiceRoom, createChannel, createSheet, channelName
   notes.ts        Markdown notes; saves carry the version they started from (409 on conflict)
   files.ts        uploads to DATA_DIR/files with SHA-256; downloads; Files view API
   archive.ts      room export/import (.warroom: tar.gz + manifest, optional AES-256-GCM); archive-routes.ts, room-cli.ts
@@ -102,6 +109,10 @@ scripts/capture-showcase.mjs   seeds a fictional incident and regenerates docs/i
 - Entra accounts are matched by object ID, then UPN. Never use Entra's `email` claim to find an account (users can edit it). Okta email is trusted.
 - SAML must stay strict: signed assertions, `InResponseTo` required (no IdP-initiated), tenant-specific issuer.
 - `returnTo` redirects go through `safeReturnTo` (same-origin paths only).
+
+**Module boundaries.**
+- Shared war room logic lives in the small modules (model, permissions, timeline, messages, rooms). Feature modules import those, never `api.ts` or a file in `routes/`. Don't add `await import()` to dodge a cycle; the ones left in `guests.ts` (auth, agents) are a known cycle still to untangle.
+- New core routes go in the matching `routes/*.ts` file, wrapped in `h()`, throwing `HttpError` for user-facing failures.
 
 **Room control and accountability.**
 - `canControl` = not a guest AND (app admin OR IC OR room admin OR the room has no IC and no admins). Gate moderation routes with it.
