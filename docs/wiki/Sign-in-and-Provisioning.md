@@ -4,7 +4,7 @@
 
 War Room signs people in with **Okta (OIDC)** and/or **Microsoft Entra ID (OIDC or SAML 2.0)**. Both can be on at once; the sign-in page shows a button for each. Either can provision people over **SCIM 2.0**. Accounts without single sign-on can **sign in with an emailed code**.
 
-All of this is set in **Admin → Settings**. Each section shows the redirect URIs and identifiers to paste into the identity provider, and **Test** checks your values before you save.
+All of this is set in **Admin → Settings**. Each section has collapsible **Setup instructions** with every step for the identity provider, filled in with this War Room's own addresses (click a value to copy it; Entra switches between the OIDC and SAML steps as you pick the protocol), and **Test** checks your values before you save.
 
 ![Okta settings](../images/admin-settings.png)
 

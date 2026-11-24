@@ -3,6 +3,7 @@ import { api, ApiError } from '../lib/api';
 import { useApp } from '../lib/app';
 import { utcTime } from '../lib/format';
 import { Icons, Modal } from './ui';
+import { IntegrationGuide } from './SetupGuides';
 
 type Access = 'all' | 'roles' | 'admins';
 
@@ -245,6 +246,7 @@ function IntegrationDialog({
       }
     >
       <div className="form">
+        <IntegrationGuide type={type} open={!existing} />
         <label>
           Display name
           <input value={name} onChange={(e) => setName(e.target.value)} />

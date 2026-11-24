@@ -2,7 +2,7 @@
 
 [← Wiki home](Home.md)
 
-Connect integrations in **Admin → Integrations**, then use them from **Investigate** in any war room. Every search is shared with the room and recorded on the incident timeline with who ran it.
+Connect integrations in **Admin → Integrations**, then use them from **Investigate** in any war room. Each connection dialog starts with step-by-step **Setup instructions** for creating the read-only credentials. Every search is shared with the room and recorded on the incident timeline with who ran it.
 
 | Integration | Credentials | What it does |
 |---|---|---|

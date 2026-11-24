@@ -145,7 +145,7 @@ export function Admin() {
           </button>
         </div>
       </header>
-      <main className="dash-main">
+      <main className="dash-main admin-main">
         {tab === 'settings' ? (
           <AdminSettings onChanged={load} />
         ) : tab === 'agents' ? (

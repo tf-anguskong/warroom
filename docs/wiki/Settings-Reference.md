@@ -5,6 +5,7 @@
 All server configuration lives in **Admin → Settings**, stored in the database. Saving takes effect immediately, with no restart.
 
 - A value saved in Settings wins over an environment variable, which wins over the default. A field whose value comes from the environment is labelled **from environment** until an admin saves over it.
+- Okta, Microsoft Entra ID, Provisioning (SCIM), Email, Voice, Webhooks and AI agents each have collapsible **Setup instructions**, step by step, with this War Room's addresses filled in. They start open while the section isn't set up yet.
 - **Test** checks the values in the form before you save: Okta and Entra discovery, the SAML certificate (and its expiry), an SMTP connection and login, and a LiveKit API call.
 - **Secrets** (client secrets, SMTP password, SCIM token, LiveKit secret) are encrypted at rest with AES-256-GCM and never sent back to the browser; the form only shows whether one is saved. Leaving a secret empty when saving keeps the current one.
 - Every save is in the admin activity log, with what changed (never secret values).

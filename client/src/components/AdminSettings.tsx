@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router';
 import { api, ApiError } from '../lib/api';
 import { useApp } from '../lib/app';
 import { Icons, Modal } from './ui';
+import { SettingsGuide } from './SetupGuides';
 
 type Kind = 'string' | 'url' | 'number' | 'bool' | 'enum' | 'list' | 'text' | 'secret';
 interface FieldView {
@@ -34,6 +35,9 @@ interface SettingsView {
   bundledLiveKit: boolean;
   sections: SectionView[];
 }
+
+/** Sections with setup instructions: on wide screens they sit beside the form. */
+const GUIDED = ['okta', 'entra', 'scim', 'email', 'voice', 'webhooks', 'agents'];
 
 const STATUS_TEXT = { on: 'On', off: 'Off', incomplete: 'Incomplete' } as const;
 
@@ -174,6 +178,23 @@ function SectionForm({ section, view, onSaved }: { section: SectionView; view: S
         </div>
       )}
 
+      <div className={GUIDED.includes(section.id) ? 'settings-split' : 'settings-single'}>
+      <aside className="settings-aside">
+      <SettingsGuide
+        key={section.id}
+        section={section.id}
+        ctx={{
+          // The saved public address (or the one being typed, on the General page).
+          base: String((section.id === 'general' ? draft.publicUrl : undefined) ?? view.sections.find((s) => s.id === 'general')?.fields.find((f) => f.key === 'publicUrl')?.value ?? location.origin),
+          draft,
+          info: section.info,
+          bundledLiveKit: view.bundledLiveKit,
+          open: section.status !== 'on',
+        }}
+      />
+      </aside>
+      <div className="settings-main">
+
       {section.info.length > 0 && (
         <div className="settings-info">
           <div className="muted small">{section.id === 'agents' ? 'Give this address to the agent (for example Claude → Add custom connector)' : 'Copy these into your identity provider'}</div>
@@ -255,6 +276,8 @@ function SectionForm({ section, view, onSaved }: { section: SectionView; view: S
           </div>
         )}
       </form>
+      </div>
+      </div>
 
       {confirmReset && (
         <Modal
