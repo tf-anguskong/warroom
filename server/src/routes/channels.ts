@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { now, q, tx } from '../db.js';
-import { emitToChannel, joinIncidentToChannel, refreshIncident, removeIncidentFromChannel, visibleChannelIds } from '../realtime.js';
-import { mentionsToText } from '../mentions.js';
+import { joinIncidentToChannel, refreshIncident, removeIncidentFromChannel } from '../realtime.js';
 import { pendingUploads } from '../files.js';
 import { HttpError, incidentKey, mustChannel, mustIncident, type MessageRow } from '../model.js';
 import { addTimeline } from '../timeline.js';
@@ -170,35 +169,4 @@ router.post(
   }),
 );
 
-router.patch(
-  '/messages/:id',
-  h((req) => {
-    const m = q.get<MessageRow>('SELECT * FROM messages WHERE id = ?', req.params.id);
-    if (!m) throw new HttpError(404, 'message not found');
-    const ch = mustChannel(m.channel_id);
-    const pinning = typeof req.body?.pinned === 'boolean';
-    // Check everything before changing anything.
-    if (typeof req.body?.body === 'string' && m.user_id !== req.user!.id) throw new HttpError(403, 'can only edit your own messages');
-    // Pins go on the timeline, which guests may not be able to see (and must not write to elsewhere).
-    if (pinning && req.user!.is_guest) throw new HttpError(403, 'Guests can’t pin messages');
-    // A pin lands on the timeline of the war room it was pinned from: one where this channel is open.
-    const pinIncident = str(req.body?.incidentId) || ch.incident_id;
-    if (pinning && req.body.pinned && !visibleChannelIds(pinIncident).includes(ch.id)) {
-      throw new HttpError(400, 'That channel isn’t open in that war room');
-    }
-    if (typeof req.body?.body === 'string') {
-      q.run('UPDATE messages SET body = ?, edited_at = ? WHERE id = ?', str(req.body.body, 20000), now(), m.id);
-    }
-    if (pinning) {
-      q.run('UPDATE messages SET pinned = ? WHERE id = ?', req.body.pinned ? 1 : 0, m.id);
-      if (req.body.pinned) {
-        addTimeline(pinIncident, req.user!.id, 'pin', mentionsToText(m.body).slice(0, 500), { messageId: m.id, channelId: ch.id });
-      }
-    }
-    const updated = serializeMessage(
-      q.get<MessageRow>('SELECT m.*, u.display_name FROM messages m LEFT JOIN users u ON u.id = m.user_id WHERE m.id = ?', m.id)!,
-    );
-    emitToChannel(ch.id, 'message:updated', updated);
-    return { message: updated };
-  }),
-);
+// Editing, deleting, history, copy and move: routes/messages.ts

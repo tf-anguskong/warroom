@@ -92,6 +92,8 @@ Every code is on the timeline and in the activity log.
 | Action | Anyone in the room | IC / room admin | App admin | Guest |
 |---|:-:|:-:|:-:|:-:|
 | Chat, voice, edit sheets and notes, add timeline entries | ✓ | ✓ | ✓ | Only what they were given |
+| Edit and delete their own messages; see edit history | ✓ | ✓ | ✓ | ✓ (in their channels) |
+| Edit, delete or erase anyone's messages; copy or move messages between channels; read deleted messages | Only if the room has no IC and no room admins | ✓ | ✓ | — |
 | Open breakout rooms, run searches* | ✓ | ✓ | ✓ | — |
 | Change severity, status, roles; move, mute, remove from voice | Only if the room has no IC and no room admins | ✓ | ✓ | — |
 | Invite guests, answer join requests, change or end guest access | (same) | ✓ | ✓ | — |

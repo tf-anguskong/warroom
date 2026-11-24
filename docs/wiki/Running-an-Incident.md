@@ -66,6 +66,19 @@ Every incident has a **Main Bridge**. Anyone can open **breakout rooms** for par
 - A channel can be **attached to several voice rooms** and **shared with other incidents**: both war rooms see and post to the same channel, which helps when two incidents turn out to be related.
 - Paste screenshots straight into chat, or drop files. **Pin** important messages: a pin also lands on the incident timeline.
 
+### Editing, deleting, copying and moving messages
+
+Use a message's **⋯** menu.
+
+| Action | Who | What happens |
+|---|---|---|
+| **Edit** | The author; the IC, room admins and admins for anyone's message | The message shows *(edited)*, or *(edited by Alice)* when someone else edited it. Click it to see every earlier version, with who wrote it and when. Anyone who can see the message can see its history. |
+| **Delete** | The author; the IC, room admins and admins for anyone's message | A *Message deleted by …* placeholder stays. The IC, room admins and admins can still read what it said (*see what it said*); others can't. |
+| **Erase** | The same people, when deleting (or later, on the placeholder) | Also removes the text and every earlier version from the history, and deletes the message's attachments. For a password, key or personal data pasted by mistake. Can't be undone. |
+| **Copy / Move…** | The IC, room admins and admins | Puts the message in another channel open in this war room, keeping its author and attachments and marked *Copied from #general by …* or *Moved from …*. A moved message keeps its time; a copy appears now. The dialog says which guests will start (or stop) seeing it, and warns when the channel is shared with another war room. Use it to move key information where the right people see it. |
+
+Deletes, edits of someone else's message, copies and moves all go on the incident timeline (type *Moderation*), without the deleted text. System messages can be deleted by the IC and room admins but not edited. AI agents can't edit, delete, copy or move messages. Edit histories are kept in room archives.
+
 ### @mentions
 
 `@name` for a person, `@Incident Commander` (or any role) for whoever holds it, `@here` for everyone in the war room right now. Mentions are highlighted, show an @ badge on the channel and on the dashboard card, stay unread until you open the channel, and pop up a notice wherever you are in the app.

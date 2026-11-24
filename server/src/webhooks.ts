@@ -429,7 +429,7 @@ export function timelineToWebhooks(incidentId: string, type: string, text: strin
     : type === 'finding' ? 'timeline.finding'
     : type === 'action' ? 'timeline.action'
     : type === 'pin' ? 'message.pinned'
-    : type === 'evidence' ? 'evidence.added'
+    : type === 'evidence' && text.startsWith('Evidence added') ? 'evidence.added'
     : null;
   if (!event) return;
   setImmediate(() => {

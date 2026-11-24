@@ -34,7 +34,8 @@ server/src/
   scim.ts         SCIM 2.0 (Okta / Entra provisioning)
   api.ts          mounts routes/* under /api behind requireAuth (nothing else lives here)
   routes/         incidents.ts (snapshot, severity/status, roles, command, room admins), voice.ts, assignments.ts,
-                  channels.ts (+ messages), timeline.ts (+ export.md), sheets.ts, admin.ts; common.ts has h() and str()
+                  channels.ts (+ posting and reading messages), messages.ts (edit, delete/erase, history, copy, move),
+                  timeline.ts (+ export.md), sheets.ts, admin.ts; common.ts has h() and str()
   model.ts        row types, HttpError, mustIncident/mustChannel/mustSheet, incidentKey, STATUS_LABEL
   permissions.ts  canControl, commanderOf, roomAdminIds, requireControl, requireAdmin
   timeline.ts     addTimeline (emits live and feeds webhooks)
@@ -104,6 +105,10 @@ scripts/capture-showcase.mjs   seeds a fictional incident and regenerates docs/i
 - Webhook URLs are secrets: `secret_enc` only, never returned (show `url_hint`). Delivery goes through `post()` with `guardedLookup` (no internal addresses after DNS unless `config.webhooks.allowPrivate`), no redirects, retries only on 5xx/429/network.
 - New webhook events: map a timeline type (or a `ref` marker) in `timelineToWebhooks`, add it to `EVENTS` with a label, and format it in `messageFor`. Respect `detail === 'brief'`: no titles, text or names.
 - Defuse mentions in anything sent (`defuse`, Slack escaping, Discord `allowed_mentions`).
+
+**Messages.**
+- Never overwrite a message's text without first saving the old version to `message_revisions` (`keepVersion`): edits are `reason = 'edit'` (anyone who can see the message may read them), deletes are `reason = 'delete'` (only `canControl`). Erase is the one exception: it removes the revisions on purpose.
+- Moderating someone else's message (edit, delete, copy, move) needs `canControl` for the war room the request comes from (`incidentId`), and writes a `moderation` timeline entry without the deleted text.
 
 **Identity.**
 - Entra accounts are matched by object ID, then UPN. Never use Entra's `email` claim to find an account (users can edit it). Okta email is trusted.

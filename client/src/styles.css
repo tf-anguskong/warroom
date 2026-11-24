@@ -5423,3 +5423,91 @@ tr.alert-detail .codeblock {
     justify-content: flex-start;
   }
 }
+
+/* ---------- message editing, history, copy/move ---------- */
+.msg-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 2px;
+}
+.msg-edit textarea {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+}
+.msg-edit-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.msg-edit-bar .muted {
+  flex: 1;
+  min-width: 200px;
+}
+.msg-body.deleted em {
+  color: var(--text-3);
+}
+.msg-body.deleted .link-btn {
+  margin-left: 8px;
+}
+.edited-link {
+  margin-left: 4px;
+  color: var(--text-3);
+  text-decoration: underline dotted;
+}
+.edited-link:hover {
+  color: var(--text-2);
+}
+.msg-provenance {
+  font-style: italic;
+}
+.msg-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.msg-history li {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  background: var(--bg-elev2);
+}
+.msg-history li.current {
+  border-color: var(--accent);
+}
+.msg-history li.deleted {
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--border));
+}
+.msg-history-body {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+.msg-quote {
+  border-left: 3px solid var(--border-strong);
+  padding: 4px 10px;
+  background: var(--bg-elev2);
+  border-radius: var(--radius-sm);
+  overflow-wrap: anywhere;
+}
+.copy-move-notes {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Long labels must not squeeze the box itself. */
+.form label.check > input {
+  flex: none;
+}
+
+/* The message menu stays one line per item; it grows instead of wrapping. */
+.msg-menu button {
+  white-space: nowrap;
+}

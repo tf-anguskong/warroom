@@ -1,4 +1,4 @@
-import { newId, now, q } from './db.js';
+import { db, newId, now, q } from './db.js';
 import { emitToChannel, emitToUser, visibleChannelIds } from './realtime.js';
 import { getUser } from './users.js';
 import { mentionedUserIds, mentionsToText, resolveMentions } from './mentions.js';
@@ -8,6 +8,41 @@ import { currentAgent } from './agent-context.js';
 import { incidentKey, type ChannelRow, type IncidentRow, type MessageRow } from './model.js';
 
 /** Chat messages: posting (people, agents and system notices), mentions, and the shape sent to browsers. */
+
+// Moderation and history: who edited or deleted a message, where it was moved or copied from, and
+// every earlier version (message_revisions holds each version that was replaced, with who wrote it).
+{
+  const cols = new Set((db.prepare('PRAGMA table_info(messages)').all() as { name: string }[]).map((c) => c.name));
+  for (const [name, type] of [
+    ['edited_by', 'TEXT'],
+    ['deleted_at', 'TEXT'],
+    ['deleted_by', 'TEXT'],
+    ['erased', 'INTEGER'],
+    ['moved_from', 'TEXT'],
+    ['moved_by', 'TEXT'],
+    ['moved_at', 'TEXT'],
+    ['copied_from', 'TEXT'],
+    ['copied_by', 'TEXT'],
+    ['copied_original_at', 'TEXT'],
+  ]) {
+    if (!cols.has(name)) db.exec(`ALTER TABLE messages ADD COLUMN ${name} ${type}`);
+  }
+  db.exec(`
+CREATE TABLE IF NOT EXISTS message_revisions (
+  id TEXT PRIMARY KEY,
+  message_id TEXT NOT NULL,
+  body TEXT NOT NULL,
+  written_at TEXT NOT NULL,
+  written_by TEXT,
+  replaced_at TEXT NOT NULL,
+  replaced_by TEXT,
+  reason TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_message_revisions ON message_revisions(message_id, replaced_at);
+`);
+}
+
+const nameOf = (id: string | null | undefined) => (id ? getUser(id)?.display_name ?? 'someone' : null);
 
 export function serializeMessage(m: MessageRow) {
   return {
@@ -27,6 +62,13 @@ export function serializeMessage(m: MessageRow) {
     ),
     createdAt: m.created_at,
     editedAt: m.edited_at,
+    /** Set when someone other than the author made the last edit. */
+    editedBy: m.edited_by && m.edited_by !== m.user_id ? nameOf(m.edited_by) : null,
+    /** Earlier versions anyone can look at (deleted originals are only for whoever runs the room). */
+    revisions: q.get<{ n: number }>("SELECT COUNT(*) AS n FROM message_revisions WHERE message_id = ? AND reason = 'edit'", m.id)!.n,
+    deleted: m.deleted_at ? { by: nameOf(m.deleted_by), at: m.deleted_at, erased: Boolean(m.erased) } : null,
+    movedFrom: m.moved_from ? { channel: m.moved_from, by: nameOf(m.moved_by), at: m.moved_at } : null,
+    copiedFrom: m.copied_from ? { channel: m.copied_from, by: nameOf(m.copied_by), originalAt: m.copied_original_at } : null,
     attachments: attachmentsOf(m.id),
   };
 }

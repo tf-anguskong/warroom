@@ -12,6 +12,7 @@ const PEOPLE = new Set(['joined', 'presence', 'guest', 'access']);
 const TYPE_LABEL: Record<string, string> = {
   declared: 'Declared',
   webhook: 'Webhook',
+  moderation: 'Moderation',
   status: 'Status',
   severity: 'Severity',
   role: 'Role',

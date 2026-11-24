@@ -37,7 +37,8 @@ War Room holds sensitive material during the worst days of an organisation's yea
 
 ## Room control and accountability
 
-- Moderation (roles, severity, status, voice moves, mute, remove, invites, guest access) is limited to the Incident Commander, room admins and app admins.
+- Moderation (roles, severity, status, voice moves, mute, remove, invites, guest access, and editing, deleting, copying or moving other people's messages) is limited to the Incident Commander, room admins and app admins.
+- Chat edits keep every earlier version, visible to anyone who can see the message. Deleted messages stay readable to whoever runs the room unless they're **erased**, which removes the text, its history and its attachments for good (for secrets pasted by mistake).
 - Anything that changes who does what goes on the **incident timeline** with who did it; admin actions go in the **admin activity log**.
 
 ## Files

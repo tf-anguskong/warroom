@@ -153,6 +153,13 @@ export interface Message {
   mentionNames: Record<string, string>;
   createdAt: string;
   editedAt: string | null;
+  /** Set when someone other than the author made the last edit. */
+  editedBy?: string | null;
+  /** How many earlier versions its history has. */
+  revisions?: number;
+  deleted?: { by: string | null; at: string; erased: boolean } | null;
+  movedFrom?: { channel: string; by: string | null; at: string | null } | null;
+  copiedFrom?: { channel: string; by: string | null; originalAt: string | null } | null;
   attachments: FileItem[];
 }
 

@@ -4,6 +4,7 @@ import { router as incidents } from './routes/incidents.js';
 import { router as voice } from './routes/voice.js';
 import { router as assignments } from './routes/assignments.js';
 import { router as channels } from './routes/channels.js';
+import { router as messages } from './routes/messages.js';
 import { router as timeline } from './routes/timeline.js';
 import { router as sheets } from './routes/sheets.js';
 import { router as admin } from './routes/admin.js';
@@ -15,4 +16,4 @@ import { router as admin } from './routes/admin.js';
  */
 export const api = Router();
 api.use(requireAuth);
-api.use(incidents, voice, assignments, channels, timeline, sheets, admin);
+api.use(incidents, voice, assignments, channels, messages, timeline, sheets, admin);

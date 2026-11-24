@@ -11,6 +11,7 @@ import { filesFrom } from '../lib/upload';
 import { AssignDialog } from './AssignDialog';
 import { GuestTag } from './Guests';
 import { AgentTag } from './Agents';
+import { CopyMoveDialog, DeleteDialog, HistoryDialog, MessageEditor } from './MessageTools';
 
 const TIMELINE_TYPES = [
   { key: 'decision', label: 'Decision' },
@@ -37,6 +38,9 @@ export function ChatView({
   const [hasMore, setHasMore] = useState(false);
   const [showPins, setShowPins] = useState(false);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+  const [moreFor, setMoreFor] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [dialog, setDialog] = useState<{ kind: 'history' | 'delete' | 'move'; message: Message } | null>(null);
   const [assigning, setAssigning] = useState(false);
   const [dragging, setDragging] = useState(false);
   const composer = useRef<ComposerHandle>(null);
@@ -56,19 +60,23 @@ export function ChatView({
     markRead();
     const onNew = (m: Message) => {
       if (m.channelId !== channelId) return;
-      setMessages((ms) => (ms && !ms.some((x) => x.id === m.id) ? [...ms, m] : ms));
+      // A moved message keeps its time, so it may belong in the middle.
+      setMessages((ms) => (ms && !ms.some((x) => x.id === m.id) ? [...ms, m].sort((a, b) => a.createdAt.localeCompare(b.createdAt)) : ms));
       if (m.mentions.includes(me.id)) markRead();
     };
     const onUpd = (m: Message) => m.channelId === channelId && setMessages((ms) => ms?.map((x) => (x.id === m.id ? m : x)) ?? ms);
+    const onRemoved = (e: { id: string; channelId: string }) => e.channelId === channelId && setMessages((ms) => ms?.filter((x) => x.id !== e.id) ?? ms);
     const onFiles = (e: { messageId: string; channelId: string; attachments: Message['attachments'] }) =>
       e.channelId === channelId && setMessages((ms) => ms?.map((x) => (x.id === e.messageId ? { ...x, attachments: e.attachments } : x)) ?? ms);
     s.on('message:new', onNew);
     s.on('message:updated', onUpd);
+    s.on('message:removed', onRemoved);
     s.on('message:files', onFiles);
     return () => {
       alive = false;
       s.off('message:new', onNew);
       s.off('message:updated', onUpd);
+      s.off('message:removed', onRemoved);
       s.off('message:files', onFiles);
     };
   }, [channelId, me.id]);
@@ -144,7 +152,10 @@ export function ChatView({
 
   for (const m of messages ?? []) Object.assign(nameCache.current, m.mentionNames);
   if (!channel) return <div className="empty sm">Channel not available</div>;
-  const pins = messages?.filter((m) => m.pinned) ?? [];
+  const pins = messages?.filter((m) => m.pinned && !m.deleted) ?? [];
+  // Whoever runs the room can edit, delete, copy and move anyone's messages.
+  const moderator = state.canControl && !me.isGuest;
+  const rel = (iso: string) => `${utcTime(iso).slice(0, 5)}Z`;
 
   return (
     <div
@@ -274,12 +285,40 @@ export function ChatView({
                         {m.pinned && <span className="pin-flag">{Icons.pin}</span>}
                       </div>
                     )}
-                    <div className="msg-body">
-                      {m.body && renderMessage(m.body, copy, mentionLookup)}
-                      {m.editedAt && <span className="muted small"> (edited)</span>}
-                    </div>
-                    <Attachments files={m.attachments ?? []} />
+                    {(m.movedFrom || m.copiedFrom) && (
+                      <div className="msg-provenance muted small">
+                        {m.movedFrom
+                          ? `Moved from ${m.movedFrom.channel}${m.movedFrom.by ? ` by ${m.movedFrom.by}` : ''}`
+                          : `Copied from ${m.copiedFrom!.channel}${m.copiedFrom!.by ? ` by ${m.copiedFrom!.by}` : ''}${m.copiedFrom!.originalAt ? ` · first posted ${rel(m.copiedFrom!.originalAt)}` : ''}`}
+                      </div>
+                    )}
+                    {m.deleted ? (
+                      <div className="msg-body deleted">
+                        <em>
+                          Message deleted{m.deleted.by ? ` by ${m.deleted.by}` : ''}
+                          {m.deleted.erased ? ' and erased' : ''}
+                        </em>
+                        {moderator && !m.deleted.erased && (
+                          <button className="link-btn small" onClick={() => setDialog({ kind: 'history', message: m })}>
+                            see what it said
+                          </button>
+                        )}
+                      </div>
+                    ) : editingId === m.id ? (
+                      <MessageEditor message={m} incidentId={state.incident.id} othersMessage={m.userId !== me.id} onDone={() => setEditingId(null)} />
+                    ) : (
+                      <div className="msg-body">
+                        {m.body && renderMessage(m.body, copy, mentionLookup)}
+                        {m.editedAt && (
+                          <button className="link-btn small edited-link" title="See earlier versions" onClick={() => setDialog({ kind: 'history', message: m })}>
+                            (edited{m.editedBy ? ` by ${m.editedBy}` : ''})
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {!m.deleted && <Attachments files={m.attachments ?? []} />}
                   </div>
+                  {!m.deleted && (
                   <div className="msg-actions">
                     <button
                       className="icon-btn sm"
@@ -307,7 +346,30 @@ export function ChatView({
                     <button className="icon-btn sm" title="Copy text" onClick={() => copy(plainText(m.body, mentionLookup))}>
                       ⧉
                     </button>
+                    <div className="menu-wrap">
+                      <button className="icon-btn sm" title="More" aria-label="More actions" onClick={() => setMoreFor(moreFor === m.id ? null : m.id)}>
+                        {Icons.more}
+                      </button>
+                      {moreFor === m.id && (
+                        <MessageMenu
+                          message={m}
+                          own={m.userId === me.id}
+                          moderator={moderator}
+                          onClose={() => setMoreFor(null)}
+                          onEdit={() => setEditingId(m.id)}
+                          onDialog={(kind) => setDialog({ kind, message: m })}
+                        />
+                      )}
+                    </div>
                   </div>
+                  )}
+                  {m.deleted && moderator && !m.deleted.erased && (
+                    <div className="msg-actions">
+                      <button className="icon-btn sm" title="Erase it completely (for a pasted secret)" onClick={() => setDialog({ kind: 'delete', message: m })}>
+                        {Icons.trash}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -315,6 +377,9 @@ export function ChatView({
         )}
       </div>
 
+      {dialog?.kind === 'history' && <HistoryDialog message={dialog.message} incidentId={state.incident.id} mentions={mentionLookup} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'delete' && <DeleteDialog message={dialog.message} incidentId={state.incident.id} own={dialog.message.userId === me.id} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'move' && <CopyMoveDialog message={dialog.message} state={state} onClose={() => setDialog(null)} />}
       {assigning && <AssignDialog state={state} presence={presence} target={{ kind: 'channel', id: channelId }} onClose={() => setAssigning(false)} />}
       {dragging && <div className="drop-overlay">Drop to attach to your message in #{channel.name}</div>}
       <MentionComposer
@@ -330,6 +395,51 @@ export function ChatView({
             : `Message #${channel.name}  ·  @ to mention, Enter to send, Shift+Enter for a new line`
         }
       />
+    </div>
+  );
+}
+
+
+/** The ⋯ menu on a message: edit, copy or move, history, delete. Unavailable items stay visible with the reason. */
+function MessageMenu({
+  message: m,
+  own,
+  moderator,
+  onClose,
+  onEdit,
+  onDialog,
+}: {
+  message: Message;
+  own: boolean;
+  moderator: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onDialog: (kind: 'history' | 'delete' | 'move') => void;
+}) {
+  const why = 'Only the author, the Incident Commander and room admins can do this';
+  const pick = (fn: () => void) => () => {
+    onClose();
+    fn();
+  };
+  return (
+    <div className="menu msg-menu" onMouseLeave={onClose}>
+      <button disabled={!own && !moderator} title={own || moderator ? undefined : why} onClick={pick(onEdit)}>
+        {Icons.note} {own ? 'Edit' : `Edit ${m.displayName}’s message`}
+      </button>
+      <button
+        disabled={!moderator}
+        title={moderator ? 'Copy or move it to another channel in this war room' : 'Only the Incident Commander and room admins can copy or move messages'}
+        onClick={pick(() => onDialog('move'))}
+      >
+        {Icons.share} Copy / Move…
+      </button>
+      <button disabled={!m.revisions} title={m.revisions ? undefined : 'It hasn’t been edited'} onClick={pick(() => onDialog('history'))}>
+        {Icons.clock} Edit history{m.revisions ? ` (${m.revisions})` : ''}
+      </button>
+      <div className="menu-sep" />
+      <button className="danger-text" disabled={!own && !moderator} title={own || moderator ? undefined : why} onClick={pick(() => onDialog('delete'))}>
+        {Icons.trash} Delete
+      </button>
     </div>
   );
 }

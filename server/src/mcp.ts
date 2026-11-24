@@ -243,7 +243,9 @@ function buildServer(c: Ctx) {
       if (!data.messages.length) return text(`#${ch.name}: no messages${a.before ? ' before that time' : ''}.`);
       const lines = data.messages.map((m) => {
         const files = m.attachments?.length ? ` [files: ${m.attachments.map((f: any) => `${f.name} (${f.id})`).join(', ')}]` : '';
-        const body = m.kind === 'system' ? `— ${mentionText(m.body, m.mentionNames)}` : mentionText(m.body, m.mentionNames);
+        const body = m.deleted
+          ? `[message deleted${m.deleted.by ? ` by ${m.deleted.by}` : ''}]`
+          : `${m.kind === 'system' ? '— ' : ''}${mentionText(m.body, m.mentionNames)}${m.editedAt ? ` (edited${m.editedBy ? ` by ${m.editedBy}` : ''})` : ''}${m.movedFrom ? ` (moved from ${m.movedFrom.channel})` : ''}${m.copiedFrom ? ` (copied from ${m.copiedFrom.channel})` : ''}`;
         return `[${when(m.createdAt)}] ${who(m.displayName, m.agent)}${m.pinned ? ' 📌' : ''}: ${body}${files}`;
       });
       const more = data.hasMore ? `\n(More above: call again with before="${data.messages[0].createdAt}")` : '';

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { closeSync, createReadStream, createWriteStream, mkdirSync, openSync, readSync, renameSync, unlinkSync } from 'node:fs';
+import { closeSync, copyFileSync, createReadStream, createWriteStream, mkdirSync, openSync, readSync, renameSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { Transform } from 'node:stream';
@@ -210,6 +210,47 @@ export function attachToMessage(messageId: string, channelId: string, userId: st
       messageId, id, channelId, userId,
     );
   }
+}
+
+/** A copied message gets its own copy of the attachments (same name and hash, new records). */
+export function copyAttachments(fromMessageId: string, toMessageId: string, toChannelId: string) {
+  const incidentId = q.get<{ incident_id: string }>('SELECT incident_id FROM channels WHERE id = ?', toChannelId)!.incident_id;
+  for (const f of q.all<FileRow>('SELECT * FROM files WHERE message_id = ? AND deleted_at IS NULL', fromMessageId)) {
+    const id = newId();
+    try {
+      copyFileSync(blobPath(f.id), blobPath(id));
+    } catch {
+      continue;
+    }
+    q.run(
+      `INSERT INTO files (id, incident_id, channel_id, message_id, note_id, source, name, declared_type, image_type, preview, size, sha256, description, uploaded_by, uploaded_at)
+       VALUES (?, ?, ?, ?, NULL, 'chat', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      id, incidentId, toChannelId, toMessageId, f.name, f.declared_type, f.image_type, f.preview, f.size, f.sha256, f.description, f.uploaded_by, f.uploaded_at,
+    );
+  }
+  emitFiles(incidentId);
+}
+
+/** A moved message takes its attachments with it, so who can open them follows the new channel. */
+export function moveAttachments(messageId: string, toChannelId: string) {
+  const incidentId = q.get<{ incident_id: string }>('SELECT incident_id FROM channels WHERE id = ?', toChannelId)!.incident_id;
+  q.run('UPDATE files SET channel_id = ?, incident_id = ? WHERE message_id = ?', toChannelId, incidentId, messageId);
+  emitFiles(incidentId);
+}
+
+/** Erasing a message (a pasted secret) removes its attachments' bytes too; the records and hashes stay. */
+export function eraseAttachments(messageId: string, userId: string) {
+  const files = q.all<FileRow>('SELECT * FROM files WHERE message_id = ? AND deleted_at IS NULL', messageId);
+  for (const f of files) {
+    q.run('UPDATE files SET deleted_by = ?, deleted_at = ? WHERE id = ?', userId, now(), f.id);
+    try {
+      unlinkSync(blobPath(f.id));
+    } catch {
+      /* already gone */
+    }
+    emitFiles(f.incident_id);
+  }
+  return files.length;
 }
 
 /** Uploads waiting to be attached: checked before a message with attachments is created. */

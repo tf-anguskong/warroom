@@ -47,6 +47,16 @@ export interface MessageRow {
   edited_at: string | null;
   display_name?: string | null;
   agent?: string | null;
+  edited_by?: string | null;
+  deleted_at?: string | null;
+  deleted_by?: string | null;
+  erased?: number | null;
+  moved_from?: string | null;
+  moved_by?: string | null;
+  moved_at?: string | null;
+  copied_from?: string | null;
+  copied_by?: string | null;
+  copied_original_at?: string | null;
 }
 
 export class HttpError extends Error {

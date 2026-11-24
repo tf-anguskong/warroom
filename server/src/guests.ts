@@ -111,6 +111,9 @@ const RULES: Rule[] = [
   ['GET', new RegExp(`^/api/channels/${ID}/(messages|pins)$`), (u, inc, m) => canSee(u, inc, 'channel', m[1])],
   ['POST', new RegExp(`^/api/channels/${ID}/(messages|mentions/read)$`), (u, inc, m) => canSee(u, inc, 'channel', m[1])],
   ['PATCH', new RegExp(`^/api/messages/${ID}$`), (u, inc, m) => canSee(u, inc, 'channel', lookup.channelOf(m[1]))],
+  // Their own messages only (routes/messages.ts checks authorship); edit history of what they can see.
+  ['DELETE', new RegExp(`^/api/messages/${ID}$`), (u, inc, m) => canSee(u, inc, 'channel', lookup.channelOf(m[1]))],
+  ['GET', new RegExp(`^/api/messages/${ID}/history$`), (u, inc, m) => canSee(u, inc, 'channel', lookup.channelOf(m[1]))],
   ['POST', new RegExp(`^/api/voice-rooms/${ID}/token$`), (u, inc, m) => lookup.roomIncident(m[1]) === inc && canSee(u, inc, 'voice', m[1])],
   // Files: the routes check the channel or note the file belongs to (see files.ts canOpen).
   ['POST', new RegExp(`^/api/incidents/${ID}/files$`), (_u, inc, m) => m[1] === inc],
